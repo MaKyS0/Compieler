@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: sudo apt-get update && sudo apt-get install -y g++ clang-format
+      - run: npm install -g prettier@3
+      - run: pip install -r backend/requirements-dev.txt
+      # Run as root so the LocalSandbox reaches isolation level L1 (PID/net namespaces, per-project uids).
+      - name: backend tests
+        working-directory: backend
+        run: sudo -E env "PATH=$PATH" python -m pytest -q
+
+  frontend:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        with: { name: frontend-dist, path: frontend/dist }
+
+  e2e:
+    needs: frontend
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: sudo apt-get update && sudo apt-get install -y g++ clang-format
+      - run: npm install -g prettier@3
+      - run: pip install -r backend/requirements-dev.txt
+      - uses: actions/download-artifact@v4
+        with: { name: frontend-dist, path: frontend/dist }
+      - run: npm ci && npx playwright install --with-deps chromium
+        working-directory: e2e
+      - name: playwright
+        working-directory: e2e
+        # root => LocalSandbox L1, same as the backend job
+        run: sudo -E env "PATH=$PATH" E2E_PYTHON=$(which python) npx playwright test
+
+  # Exercises the DockerSandbox, which could not be run where this project was developed.
+  docker-sandbox:
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r backend/requirements-dev.txt
+      - run: docker build -f docker/runner.Dockerfile -t compieler-runner:latest .
+      - name: backend tests against Docker
+        working-directory: backend
+        run: sudo -E env "PATH=$PATH" TEST_SANDBOX=docker python -m pytest -q -k "not fork_bomb"

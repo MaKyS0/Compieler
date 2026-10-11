@@ -1,0 +1,85 @@
+@import "@xterm/xterm/css/xterm.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root,
+[data-theme="dark"] {
+  --bg: 24 25 28;
+  --panel: 30 31 35;
+  --raised: 40 42 47;
+  --line: 52 54 60;
+  --fg: 214 217 222;
+  --dim: 134 139 148;
+  --accent: 96 165 250;
+  --ok: 74 190 120;
+  --warn: 221 169 64;
+  --err: 238 99 99;
+  color-scheme: dark;
+}
+[data-theme="light"] {
+  --bg: 250 250 251;
+  --panel: 244 245 247;
+  --raised: 233 235 239;
+  --line: 214 218 224;
+  --fg: 32 35 41;
+  --dim: 102 108 120;
+  --accent: 28 100 220;
+  --ok: 22 130 70;
+  --warn: 170 110 0;
+  --err: 200 40 40;
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: rgb(var(--bg));
+  color: rgb(var(--fg));
+  font-family: theme("fontFamily.sans");
+  font-size: 13px;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--line)) transparent;
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgb(var(--line)); border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
+
+button { font: inherit; color: inherit; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+  outline: 1px solid rgb(var(--accent));
+  outline-offset: -1px;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex h-7 items-center gap-1.5 rounded px-2 text-[12px] text-fg transition-colors
+      hover:bg-raised disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent;
+  }
+  .btn-solid { @apply bg-raised border border-line hover:bg-line/60; }
+  .btn-run { @apply border border-ok/50 bg-ok/15 text-ok hover:bg-ok/25; }
+  .btn-stop { @apply border border-err/50 bg-err/15 text-err hover:bg-err/25; }
+  .field {
+    @apply h-7 w-full rounded border border-line bg-bg px-2 text-[12px] text-fg placeholder:text-dim;
+  }
+  .tab {
+    @apply relative flex h-8 shrink-0 items-center gap-1.5 border-r border-line px-3 text-[12px] text-dim
+      hover:text-fg;
+  }
+  .tab[data-active="true"] { @apply bg-bg text-fg; }
+  .tab[data-active="true"]::before {
+    content: "";
+    @apply absolute inset-x-0 top-0 h-px bg-accent;
+  }
+  .kbd { @apply rounded border border-line bg-raised px-1 font-mono text-[10px] text-dim; }
+}
+
+.xterm { padding: 4px 8px; height: 100%; }
+.xterm-viewport { background: transparent !important; }

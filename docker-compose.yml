@@ -1,0 +1,72 @@
+# Production-style deployment: nginx -> backend (FastAPI) -> Docker sandboxes, PostgreSQL for metadata.
+#
+#   docker compose --profile build build runner-image    # builds the sandbox image once
+#   cp .env.example .env && edit .env                    # set secrets
+#   docker compose up -d
+#   sudo ./docker/egress-firewall.sh                     # restrict sandbox egress (see README)
+name: compieler
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on: [backend]
+    ports: ["${COMPIELER_HTTP_PORT:-8080}:80"]
+    volumes: ["./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro"]
+    restart: unless-stopped
+
+  backend:
+    build: { context: ., dockerfile: docker/backend.Dockerfile }
+    depends_on: { db: { condition: service_healthy } }
+    environment:
+      COMPIELER_ENV: prod
+      COMPIELER_SECRET_KEY: ${COMPIELER_SECRET_KEY:?set COMPIELER_SECRET_KEY in .env}
+      COMPIELER_DATABASE_URL: postgresql+asyncpg://compieler:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/compieler
+      COMPIELER_SANDBOX_BACKEND: docker
+      COMPIELER_RUNNER_IMAGE: compieler-runner:latest
+      COMPIELER_DOCKER_NETWORK: compieler-sandbox
+      # created by the backend on start-up; docker/egress-firewall.sh filters this subnet
+      COMPIELER_DOCKER_SUBNET: 172.30.0.0/16
+      COMPIELER_DOCKER_DATA_VOLUME: compieler_data
+      COMPIELER_MAX_CONCURRENT_RUNS: ${COMPIELER_MAX_CONCURRENT_RUNS:-8}
+      COMPIELER_ALLOW_RUNTIME_NETWORK: ${COMPIELER_ALLOW_RUNTIME_NETWORK:-false}
+      COMPIELER_ALLOW_REGISTRATION: ${COMPIELER_ALLOW_REGISTRATION:-true}
+    volumes:
+      - data:/data
+      # The backend starts sandbox containers through the host Docker daemon. Access to this
+      # socket is equivalent to root on the host: keep this service private, see README "Threat model".
+      - /var/run/docker.sock:/var/run/docker.sock
+    # Root inside the container is needed to chown project directories to the sandbox uid;
+    # everything else is dropped.
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: compieler
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: compieler
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U compieler"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # Not a long-running service: `docker compose --profile build build runner-image`
+  runner-image:
+    profiles: ["build"]
+    build:
+      context: .
+      dockerfile: docker/runner.Dockerfile
+      args:
+        PRELOAD_PACKAGES: ${RUNNER_PRELOAD_PACKAGES:-}
+    image: compieler-runner:latest
+    entrypoint: ["true"]
+
+volumes:
+  data: { name: compieler_data }
+  pgdata: {}
