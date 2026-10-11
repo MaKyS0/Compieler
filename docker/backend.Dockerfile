@@ -22,7 +22,7 @@ COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
 
 WORKDIR /app
 COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt black ruff
+RUN pip install --no-cache-dir -r requirements.txt black ruff uvloop httptools asyncpg
 COPY backend/app ./app
 COPY --from=frontend /src/dist /app/static
 

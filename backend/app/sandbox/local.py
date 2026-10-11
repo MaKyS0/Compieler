@@ -26,9 +26,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-import psutil
 
 from ..config import Settings
+from . import proctree
 from .base import ExecRequest, Sandbox, SpawnedProcess
 
 log = logging.getLogger("compieler.sandbox.local")
@@ -103,14 +103,7 @@ class LocalSandbox(Sandbox):
 
     def _own_tasks(self) -> int:
         """RLIMIT_NPROC counts every task of the uid, so a shared uid needs headroom."""
-        uid, total = os.geteuid(), 0
-        for p in psutil.process_iter(["uids", "num_threads"]):
-            try:
-                if p.info["uids"].real == uid:
-                    total += p.info["num_threads"]
-            except (psutil.Error, AttributeError, TypeError):
-                continue
-        return total
+        return proctree.own_task_count(os.geteuid())
 
     # ----------------------------------------------------------------- spawn
     async def spawn(self, req: ExecRequest) -> SpawnedProcess:
@@ -161,33 +154,16 @@ class LocalSandbox(Sandbox):
             limit=1 << 20,
         )
 
-        def tree() -> list[psutil.Process]:
-            try:
-                root = psutil.Process(proc.pid)
-                return [root, *root.children(recursive=True)]
-            except psutil.Error:
-                return []
-
         def rss() -> int:
-            total = 0
-            for p in tree():
-                try:
-                    total += p.memory_info().rss
-                except psutil.Error:
-                    pass
-            return total
+            return proctree.rss_bytes(proctree.descendants(proc.pid))
 
         async def kill() -> None:
-            victims = tree()
+            victims = proctree.descendants(proc.pid)
             try:
                 os.killpg(proc.pid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 pass
-            for p in victims:
-                try:
-                    p.kill()
-                except psutil.Error:
-                    pass
+            proctree.kill_pids(victims)
 
         async def cleanup() -> None:
             # Anything still alive in the group (L0 has no PID namespace) must die with the run.

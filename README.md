@@ -74,6 +74,27 @@ On start-up the backend probes for Docker; with no Docker it uses the **LocalSan
 
 > Run the backend as **root** (e.g. in a throw-away VM/container) if you want per-project uids and namespaces in local mode. As a normal user the local sandbox still applies resource limits, but all projects share your uid and user code can read what you can read — use it only for development.
 
+## Termux (Android)
+
+Works for personal use (no root ⇒ no per-project uid / namespaces: see [Security model](#security-model)).
+
+```bash
+pkg update -y && pkg upgrade -y
+pkg install -y git python nodejs clang binutils libffi openssl
+pkg install -y python-pydantic python-psutil 2>/dev/null || true   # prebuilt where available (avoids Rust builds)
+
+git clone -b claude/elegant-newton-dfnobl https://github.com/MaKyS0/Compieler && cd Compieler
+cd frontend && npm ci && npx vite build && cd ..          # `vite build` directly: TypeScript's native tsc does not run on Android
+
+cd backend
+python -m venv --system-site-packages .venv && . .venv/bin/activate
+pip install -r requirements.txt                          # psutil is skipped on Android; the backend reads /proc instead
+export COMPIELER_DATA_DIR=$HOME/compieler-data COMPIELER_STATIC_DIR=$HOME/Compieler/frontend/dist COMPIELER_SANDBOX_BACKEND=local
+uvicorn app.main:app --host 127.0.0.1 --port 8000        # open http://127.0.0.1:8000
+```
+
+`npm run build` = `vite build`; use `npm run build:check` (or `npm run typecheck`) for the type-check, which needs a desktop OS.
+
 ## Production with Docker Compose
 
 ```bash
