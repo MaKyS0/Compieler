@@ -42,7 +42,8 @@ class Server:
 
 @pytest.fixture(scope="session")
 def server():
-    data = Path(tempfile.mkdtemp(prefix="cmp-test-"))
+    external = os.environ.get("TEST_DATA_DIR")  # e.g. the host path of a docker volume
+    data = Path(external) if external else Path(tempfile.mkdtemp(prefix="cmp-test-"))
     data.chmod(0o711)  # sandbox uids must be able to traverse down to their project
     port = _free_port()
     env = {
@@ -63,7 +64,12 @@ def server():
     if ca.exists():
         shutil.copy(ca, data / "ca.pem")
         (data / "ca.pem").chmod(0o644)
-        env["COMPIELER_INSTALL_ENV"] = json.dumps({"NODE_EXTRA_CA_CERTS": str(data / "ca.pem")})
+        if env["COMPIELER_SANDBOX_BACKEND"] == "docker":  # the CA must be visible inside the container
+            env["COMPIELER_DOCKER_INSTALL_MOUNTS"] = json.dumps([f"{data / 'ca.pem'}:/etc/extra-ca.pem"])
+            ca_path = "/etc/extra-ca.pem"
+        else:
+            ca_path = str(data / "ca.pem")
+        env["COMPIELER_INSTALL_ENV"] = json.dumps({"NODE_EXTRA_CA_CERTS": ca_path, "PIP_CERT": ca_path, "SSL_CERT_FILE": ca_path})
     log = open(data / "server.log", "wb")
     proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(port), "--log-level", "warning"],
@@ -87,7 +93,11 @@ def server():
     except subprocess.TimeoutExpired:
         proc.kill()
     log.close()
-    shutil.rmtree(data, ignore_errors=True)
+    if external:  # keep the directory itself (it may be a volume mount point)
+        for child in data.iterdir():
+            shutil.rmtree(child, ignore_errors=True) if child.is_dir() else child.unlink(missing_ok=True)
+    else:
+        shutil.rmtree(data, ignore_errors=True)
 
 
 class Run:

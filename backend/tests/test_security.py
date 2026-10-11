@@ -43,7 +43,8 @@ print("PROC_LEAK", leak)
         import os
         assert os.geteuid() != 0
     else:
-        assert r.stdout.count("DENIED PermissionError") == 2, r.stdout
+        # PermissionError (local sandbox, other uid) or FileNotFoundError (Docker: the path does not exist at all)
+        assert r.stdout.count("DENIED") == 2, r.stdout
 
 
 # --------------------------------------------------------------------- tenant isolation

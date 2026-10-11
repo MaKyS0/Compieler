@@ -1,6 +1,8 @@
 # Sandbox image: every user command (pip/npm install, g++, python, node) runs in a throw-away
 # container created from this image. Keep it free of secrets.
-FROM node:22-bookworm-slim AS node
+# Override NODE_IMAGE to take Node.js from another image/registry mirror.
+ARG NODE_IMAGE=node:22-bookworm-slim
+FROM ${NODE_IMAGE} AS node
 
 FROM python:3.12-slim-bookworm
 ENV DEBIAN_FRONTEND=noninteractive PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=0

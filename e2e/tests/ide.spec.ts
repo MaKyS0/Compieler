@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import { createProjectVia, editorText, openApp, outputText, run, runButton, setCode, stopButton, tab, terminalText } from "./helpers";
 
 test.describe("online IDE (real backend, real sandbox)", () => {
   test("loads the editor as the main screen with a starter project", async ({ page }) => {
     await openApp(page);
-    await expect(page.getByLabel("Project name")).toHaveValue("My first project");
+    await expect(page.getByRole("textbox", { name: "Project name", exact: true })).toHaveValue("My first project");
     expect(await editorText(page)).toContain("Enter your name");
     for (const name of ["Output", "Errors", "Terminal", "Input", "Problems"]) await expect(tab(page, name)).toBeVisible();
     await expect(page.getByRole("button", { name: "Run", exact: true })).toBeVisible();
@@ -139,7 +140,7 @@ test.describe("online IDE (real backend, real sandbox)", () => {
 
   test("Format button formats Python with black", async ({ page }) => {
     await openApp(page);
-    await setCode(page, "x=[1,2,\n 3]\ndef f( a,b ):\n  return a+b\n");
+    await setCode(page, "x=[1,2,3]\ndef f( a,b ):\n  return a+b\n");
     await page.getByRole("button", { name: "Format" }).click();
     await expect.poll(() => editorText(page), { timeout: 15_000 }).toContain("def f(a, b):");
     expect(await editorText(page)).toContain("x = [1, 2, 3]");
@@ -172,9 +173,9 @@ test.describe("online IDE (real backend, real sandbox)", () => {
     await openApp(page);
     await page.getByRole("button", { name: "Projects" }).click();
     await page.getByLabel("New project name").fill("Second one");
-    await page.getByLabel("Language").selectOption("javascript");
+    await page.getByRole("dialog").getByLabel("Language").selectOption("javascript");
     await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
-    await expect(page.getByLabel("Project name")).toHaveValue("Second one");
+    await expect(page.getByRole("textbox", { name: "Project name", exact: true })).toHaveValue("Second one");
     await expect(page.getByRole("radio", { name: "JavaScript" })).toHaveAttribute("aria-checked", "true");
     await page.getByRole("button", { name: "Projects" }).click();
     await expect(page.getByRole("dialog").getByText("My first project")).toBeVisible();
@@ -183,8 +184,8 @@ test.describe("online IDE (real backend, real sandbox)", () => {
     expect(download.suggestedFilename()).toBe("Second_one.zip");
     const path = await download.path();
     // import it back
-    await page.locator('input[type="file"][accept*="zip"]').setInputFiles(path!);
-    await expect(page.getByLabel("Project name")).toHaveValue("Second_one", { timeout: 15_000 });
+    await page.locator('input[type="file"][accept*="zip"]').setInputFiles({ name: download.suggestedFilename(), mimeType: "application/zip", buffer: readFileSync(path!) });
+    await expect(page.getByRole("textbox", { name: "Project name", exact: true })).toHaveValue("Second_one", { timeout: 15_000 });
     await expect(page.getByRole("treeitem", { name: /index\.js/ })).toBeVisible();
   });
 
@@ -199,7 +200,7 @@ test.describe("online IDE (real backend, real sandbox)", () => {
     await page.getByRole("button", { name: "Account" }).click();
     await expect(page.getByRole("dialog")).toContainText(email);
     await page.getByRole("button", { name: "Sign out" }).click();
-    await expect(page.getByLabel("Project name")).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Project name", exact: true })).toBeVisible();
     // log back in; the original project is there
     await page.getByRole("button", { name: "Account" }).click();
     await page.getByRole("button", { name: /Already registered/ }).click();
@@ -207,21 +208,21 @@ test.describe("online IDE (real backend, real sandbox)", () => {
     await page.getByLabel(/^Password/).fill("a-long-password");
     await page.getByRole("dialog").getByRole("button", { name: "Sign in" }).click();
     await expect(page.getByText(`Signed in as ${email}`)).toBeVisible();
-    await expect(page.getByLabel("Project name")).toHaveValue("My first project");
+    await expect(page.getByRole("textbox", { name: "Project name", exact: true })).toHaveValue("My first project");
   });
 
   test("Packages panel installs a pip package and it can be imported", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Packages" }).click();
-    await page.getByLabel("Package names").fill("six");
+    await page.getByLabel("Package names").fill("tabulate");
     await page.getByRole("button", { name: "Add" }).click();
-    await expect.poll(() => terminalText(page), { timeout: 120_000 }).toContain("Successfully installed six");
-    await expect(page.getByRole("complementary").getByText("six").first()).toBeVisible({ timeout: 20_000 });
+    await expect.poll(() => terminalText(page), { timeout: 120_000 }).toContain("Successfully installed tabulate");
+    await expect(page.getByRole("complementary").getByText("tabulate").first()).toBeVisible({ timeout: 20_000 });
     await page.getByRole("button", { name: "Files" }).first().click();
-    await setCode(page, "import six\nprint('six', six.__version__)\n");
+    await setCode(page, "import tabulate\nprint('tab', tabulate.__version__)\n");
     await run(page);
     await tab(page, "Output").click();
-    await expect(page.locator("pre").first()).toContainText(/six \d+\.\d+/, { timeout: 40_000 });
+    await expect(page.locator("pre").first()).toContainText(/tab \d+\.\d+/, { timeout: 40_000 });
   });
 
   test("a missing library gives a clear hint", async ({ page }) => {

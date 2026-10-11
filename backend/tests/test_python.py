@@ -192,10 +192,11 @@ async def test_pip_install_requests_via_requirements(user):
 
 @pytest.mark.network
 async def test_install_from_packages_panel_updates_requirements(user):
-    pid = user.create_project("python", {"main.py": "import six\nprint(six.__version__)"})
-    r = await user.execute(pid, {"type": "install", "packages": ["six"]})
+    pid = user.create_project("python", {"main.py": "import tabulate\nprint(tabulate.__version__)"})
+    r = await user.execute(pid, {"type": "install", "packages": ["tabulate"]})
     assert r.exit["reason"] == "ok", r.all_text
-    assert "six" in user.http.get(f"/projects/{pid}/file", params={"path": "requirements.txt"}).json()["content"]
+    assert "Successfully installed tabulate" in r.all_text
+    assert "tabulate" in user.http.get(f"/projects/{pid}/file", params={"path": "requirements.txt"}).json()["content"]
     r = await user.run(pid, entry="main.py")
     assert r.exit["reason"] == "ok" and r.stdout.strip()
 
@@ -212,6 +213,6 @@ async def test_pip_failure_is_explained(user):
 @pytest.mark.network
 async def test_terminal_pip_command(user):
     pid = user.create_project("python", {"main.py": "print(1)"})
-    r = await user.shell(pid, "pip install six && python -c 'import six; print(\"six-ok\")'")
+    r = await user.shell(pid, "pip install termcolor && python -c 'import termcolor; print(\"termcolor-ok\")'")
     assert r.exit["reason"] == "ok", r.all_text
-    assert "six-ok" in r.all_text
+    assert "termcolor-ok" in r.all_text

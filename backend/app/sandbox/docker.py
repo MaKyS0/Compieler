@@ -121,6 +121,11 @@ class DockerSandbox(Sandbox):
             else:
                 host = self.s.docker_host_data_dir or str(self.s.data_dir)
                 args += ["--mount", f"type=bind,src={host}/{sub},dst=/cache"]
+        if req.network != "none":
+            for spec in self.s.docker_install_mounts:
+                host, _, dest = spec.partition(":")
+                if host and dest:
+                    args += ["--mount", f"type=bind,src={host},dst={dest},readonly"]
         for k, v in req.env.items():
             args += ["-e", f"{k}={v}"]
         args += [self.s.runner_image, *req.argv]

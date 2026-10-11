@@ -8,7 +8,7 @@ A browser IDE with a real backend: your code is executed on the server by real *
 * **Projects** – multi-file projects with folders, autosave, restore after reload, ZIP import/export, recent-project list, temporary guest sessions that can be upgraded to real accounts.
 * **Safety** – every run is untrusted: unprivileged user, CPU / wall-clock / memory / process / file-size / output limits, no network by default, per-project isolation, authorization enforced on the backend.
 
-> **Honest status:** see [What was verified](#what-was-verified-and-what-was-not) — the local sandbox, the API, the UI and the 100+ backend tests were run for real; the Docker sandbox and PostgreSQL deployment could not be exercised in the environment this was built in and are documented as such.
+> **Honest status:** the backend suite (104 tests) passes on both the local and the Docker sandbox, the API passes on PostgreSQL, and 19 browser tests pass — see [What was verified](#what-was-verified-and-what-was-not) for exactly what was run and the few parts (full compose stack, egress firewall) that were not.
 
 ---
 
@@ -103,6 +103,7 @@ All settings are environment variables prefixed `COMPIELER_` (or a `.env` file n
 | `SANDBOX_BACKEND` | `auto` | `docker`, `local`, or `auto` (Docker if reachable) |
 | `RUNNER_IMAGE` | `compieler-runner:latest` | sandbox image |
 | `DOCKER_DATA_VOLUME` / `DOCKER_HOST_DATA_DIR` | – | how containers mount project dirs (named volume with subpath, or host bind path) |
+| `DOCKER_SUBNET` / `DOCKER_INSTALL_MOUNTS` | `172.30.0.0/16` / `[]` | sandbox bridge subnet (for the egress firewall); extra read-only mounts for network phases, e.g. a corporate CA `["/etc/ca.pem:/etc/ca.pem"]` |
 | `RUN_WALL_SECONDS` / `RUN_CPU_SECONDS` | `60` / `15` | wall-clock and CPU ceilings for a run (clients may ask for less) |
 | `COMPILE_WALL_SECONDS` / `INSTALL_WALL_SECONDS` | `90` / `300` | compile and pip/npm phases |
 | `MEMORY_MB` / `MAX_PROCESSES` | `512` / `128` | per-run memory and process/thread cap |
@@ -207,9 +208,20 @@ docker/          backend + runner Dockerfiles, nginx.conf, egress-firewall.sh
 
 ## What was verified, and what was not
 
-Verified by actually running them in the build environment (Linux, root, Python 3.13, Node 22, GCC 13):
+Everything below was **actually executed** in the build environment (Linux VM, root, Python 3.13, Node 22, GCC 13, Docker Engine 29, PostgreSQL 16):
 
-* Backend test suite (real server subprocess, LocalSandbox at isolation **L1**): Python, C++, JavaScript, API and security tests, including real `pip install` / `npm install` over the network.
-* Production frontend build (`tsc` + Vite) and the Playwright browser suite against it.
+| What | How | Result |
+|---|---|---|
+| Backend suite on the **LocalSandbox** (isolation L1: PID + net namespaces, per-project uid) | `pytest` — real uvicorn subprocess, HTTP + WebSocket, real `pip`/`npm` installs from PyPI/npm | **104 passed** |
+| Same suite on the **DockerSandbox** (one container per command, `--network none`, read-only rootfs, caps dropped, pids/memory/cpu limits) | `TEST_SANDBOX=docker pytest` with the runner image built from `docker/runner.Dockerfile` | **104 passed** (incl. pip/npm installs from inside containers, OOM/timeout/fork-bomb, no leftover containers) |
+| Docker `volume-subpath` project mounts (what `docker-compose.yml` uses) | `TEST_DATA_DIR=<volume>` + `COMPIELER_DOCKER_DATA_VOLUME=…` | python + C++ suites passed |
+| **PostgreSQL** (`asyncpg`) | API suite against a real PG 16 instance | 20 passed, rows verified in PG |
+| Frontend production build | `tsc --noEmit` + `vite build` | OK |
+| Browser end-to-end (Chromium, desktop + phone viewport) against the built UI and a real backend | Playwright | **19 passed** |
 
-**Not verified** (no Docker daemon, PostgreSQL or second host were available): the `DockerSandbox` code path and the compose stack (`docker/*`, `docker-compose.yml`), the egress firewall script, PostgreSQL via `asyncpg`, TLS/nginx behaviour under load, and gVisor. They follow standard Docker/nginx usage but have not been executed — expect to debug small things on first deployment. The CI workflow contains a Docker job for exactly this purpose.
+**Not verified** — be aware before deploying:
+
+* The **compose stack as a whole** (nginx container, the backend *container* talking to the host Docker socket, `docker/backend.Dockerfile`, the `docker:27-cli` copy step). Docker Hub rate-limited (HTTP 429) the `nginx`, `node` and `docker` base images in the build environment, so only the pieces above were run. Expect to debug small things on first `docker compose up`.
+* `docker/egress-firewall.sh` (needs iptables on a real host), gVisor, TLS and nginx behaviour under load.
+* The Docker CI job in `.github/workflows/ci.yml` is marked `continue-on-error` for the same reason; the local-sandbox, frontend and browser jobs are the gating ones.
+* Behaviour on non-root hosts without `unshare` (isolation L0) is only covered by the code path warnings, not by the cross-project tests (those need root).

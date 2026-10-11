@@ -114,10 +114,8 @@ export const useRun = create<RunState>((set, get) => {
       }
       case "problems":
         set({ problems: ev.items });
-        if (ev.items.length) {
-          const errs = ev.items.filter((p) => p.severity === "error").length;
-          if (errs) useUI.getState().setBottomTab("problems");
-        }
+        // Compiler errors are the thing to look at; runtime errors keep the user's current tab.
+        if (ev.phase === "compile" && ev.items.some((p) => p.severity === "error")) useUI.getState().setBottomTab("problems");
         break;
       case "exit": {
         const info: ExitInfo = {
@@ -280,7 +278,7 @@ export const useRun = create<RunState>((set, get) => {
     async install(packages) {
       if (!packages.length) return;
       useUI.getState().setBottomTab("terminal");
-      await begin("install", `$ install ${packages.join(" ")}`, (s) => s.install(packages));
+      await begin("install", `install ${packages.join(" ")}`, (s) => s.install(packages));
     },
     setStdinText: (stdinText) => set({ stdinText }),
     clearOutput: () => {

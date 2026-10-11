@@ -38,7 +38,7 @@ export default defineConfig({
     },
   },
   projects: [
-    { name: "desktop", use: { viewport: { width: 1360, height: 820 } } },
+    { name: "desktop", testIgnore: /mobile\.spec\.ts/, use: { viewport: { width: 1360, height: 820 } } },
     { name: "phone", testMatch: /mobile\.spec\.ts/, use: { viewport: { width: 390, height: 780 }, hasTouch: true, isMobile: true } },
   ],
 });

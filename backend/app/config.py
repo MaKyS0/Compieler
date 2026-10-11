@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # Extra environment for phases that have network access (pip/npm): mirrors, proxies, CA bundles.
     # e.g. COMPIELER_INSTALL_ENV='{"PIP_INDEX_URL":"https://mirror/simple","NODE_EXTRA_CA_CERTS":"/certs/ca.pem"}'
     install_env: dict[str, str] = Field(default_factory=dict)
+    # Extra read-only bind mounts for docker phases with network access, "host_path:container_path"
+    # (e.g. a corporate CA bundle referenced from INSTALL_ENV).
+    docker_install_mounts: list[str] = Field(default_factory=list)
     shared_pkg_cache: bool = True  # docker only; see README "Threat model"
     # Local sandbox: every project runs under uid = base + project_id (needs root).
     sandbox_uid_base: int = 200_000
