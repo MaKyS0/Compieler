@@ -5,7 +5,8 @@ sqlalchemy[asyncio]>=2.0
 aiosqlite>=0.20
 pydantic-settings>=2.4
 pyjwt>=2.8
-argon2-cffi>=23.1
+# password hashing: Argon2id when available, scrypt (stdlib) otherwise (e.g. Android)
+argon2-cffi>=23.1; sys_platform != "android"
 python-multipart>=0.0.9
 # optional: faster process inspection; the backend falls back to /proc where it cannot be built (Android)
 psutil>=6.0; sys_platform != "android"
