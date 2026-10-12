@@ -91,7 +91,7 @@ export const localApi = {
   async config(): Promise<ServerConfig> {
     return {
       languages: ["python", "cpp", "javascript"],
-      cpp_standards: ["c++11", "c++14", "c++17", "c++20"],
+      cpp_standards: ["c++11", "c++14", "c++17", "c++20", "c++23"],
       formatters: { python: false, cpp: false, javascript: false },
       limits: { run_wall_seconds: 60, run_cpu_seconds: 60, memory_mb: 1024, max_output_bytes: 2_000_000, max_upload_bytes: 25 * 1024 * 1024 },
       allow_runtime_network: false,

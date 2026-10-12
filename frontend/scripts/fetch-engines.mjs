@@ -1,6 +1,6 @@
 // Downloads/copies the on-device engines into public/engines (git-ignored):
 //   * Pyodide (CPython compiled to WebAssembly) + a base set of wheels  -> engines/pyodide
-//   * wasm-clang (clang + lld + libc/libc++ sysroot, WebAssembly)        -> engines/cpp
+//   * YoWASP clang/lld + libc/libc++ sysroot (LLVM, WebAssembly)         -> engines/cpp
 // Run automatically by `npm run build:standalone`. Safe to re-run: existing files are kept.
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync, createWriteStream } from "node:fs";
 import { dirname, join } from "node:path";
@@ -27,7 +27,7 @@ async function download(url, dest) {
 // ---- Pyodide core --------------------------------------------------------------------
 const py = join(out, "pyodide");
 mkdirSync(py, { recursive: true });
-for (const f of ["pyodide.asm.js", "pyodide.asm.wasm", "python_stdlib.zip"]) copyFileSync(join(root, "node_modules/pyodide", f), join(py, f));
+for (const f of ["pyodide.asm.mjs", "pyodide.asm.wasm", "python_stdlib.zip"]) copyFileSync(join(root, "node_modules/pyodide", f), join(py, f));
 
 const lock = JSON.parse(readFileSync(join(root, "node_modules/pyodide/pyodide-lock.json"), "utf8"));
 const wanted = new Set();
@@ -44,7 +44,10 @@ for (const [n, p] of Object.entries(lock.packages)) if (!wanted.has(n)) p.file_n
 writeFileSync(join(py, "pyodide-lock.json"), JSON.stringify(lock));
 writeFileSync(join(py, "version.json"), JSON.stringify({ version: PYODIDE_VERSION, bundled: [...wanted] }));
 
-// ---- clang / lld / sysroot (WebAssembly) ---------------------------------------------
+// ---- clang / lld / sysroot (WebAssembly, YoWASP build of LLVM) ------------------------
 const cpp = join(out, "cpp");
-for (const f of ["clang", "lld", "memfs", "sysroot.tar"]) await download(`https://binji.github.io/wasm-clang/${f}`, join(cpp, f));
-console.log(`engines ready in ${out} (pyodide ${PYODIDE_VERSION}, bundled: ${[...wanted].join(", ")})`);
+mkdirSync(cpp, { recursive: true });
+const yowasp = join(root, "node_modules/@yowasp/clang/gen");
+for (const f of ["bundle.js", "llvm.core.wasm", "llvm.core2.wasm", "llvm.core3.wasm", "llvm.core4.wasm", "llvm-resources.tar"]) copyFileSync(join(yowasp, f), join(cpp, f));
+const clangVersion = JSON.parse(readFileSync(join(root, "node_modules/@yowasp/clang/package.json"), "utf8")).version;
+console.log(`engines ready in ${out} (pyodide ${PYODIDE_VERSION}, clang ${clangVersion}, bundled: ${[...wanted].join(", ")})`);

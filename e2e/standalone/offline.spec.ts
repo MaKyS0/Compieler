@@ -51,7 +51,7 @@ test.describe("offline app (no backend): engines run on the device", () => {
     await tab(page, "Output").click();
     await run(page);
     await expect(out(page)).toContainText("Hello, Ada!");
-    await expect(out(page)).toContainText(/Python 3\.13/);
+    await expect(out(page)).toContainText(/Python 3\.14/);
     await expect(status(page)).toContainText("exit code 0");
   });
 
@@ -137,6 +137,26 @@ test.describe("offline app (no backend): engines run on the device", () => {
     await run(page);
     await expect(out(page)).toContainText("19 1 42");
     await expect(status(page)).toContainText("exit code 4");
+  });
+
+  test("C++23: <print>, std::format, ranges and file streams", async ({ page }) => {
+    await open(page);
+    await lang(page, "C++");
+    await setCode(page, [
+      "#include <print>", "#include <format>", "#include <vector>", "#include <algorithm>", "#include <fstream>", "#include <string>",
+      "int main() {",
+      "  std::vector<int> v{3, 1, 2};",
+      "  std::ranges::sort(v);",
+      '  std::println("v={} {}", v[0], std::format("{:>4}", 42));',
+      '  { std::ofstream("o.txt") << "file-ok"; }',
+      "  std::string s; std::ifstream in(\"o.txt\"); in >> s;",
+      '  std::println("{} {}", s, __cplusplus);',
+      "}", "",
+    ].join("\n"));
+    await run(page);
+    await expect(out(page)).toContainText("v=1   42", { timeout: 90_000 });
+    await expect(out(page)).toContainText("file-ok 202302");
+    await expect(status(page)).toContainText("exit code 0");
   });
 
   test("C++: interactive printf/scanf prompt appears before input, typed in the Terminal", async ({ page }) => {

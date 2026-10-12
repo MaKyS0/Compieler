@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-// Python: real CPython 3.13 compiled to WebAssembly (Pyodide) running in a Worker.
+// Python: real CPython 3.14 compiled to WebAssembly (Pyodide) running in a Worker.
 import { loadPyodide, type PyodideInterface } from "pyodide";
 import type { FileMap, FromWorker, StdinInit, ToWorker } from "../protocol";
 import { Outbox } from "../outbox";

@@ -71,7 +71,7 @@ jobs:
         working-directory: backend
         run: sudo -E env "PATH=$PATH" TEST_SANDBOX=docker python -m pytest -q -k "not fork_bomb"
 
-  # The offline app: engines (Pyodide, wasm-clang) are downloaded at build time, tests run in Chromium.
+  # The offline app: engines (Pyodide, YoWASP clang) are downloaded at build time, tests run in Chromium.
   standalone:
     runs-on: ubuntu-24.04
     steps:

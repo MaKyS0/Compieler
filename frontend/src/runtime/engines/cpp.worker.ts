@@ -1,10 +1,11 @@
 /// <reference lib="webworker" />
-// C++: real clang + lld (LLVM 8, compiled to WebAssembly) with a wasi-libc / libc++ sysroot.
-// Programs are compiled to wasm32-wasi and executed inside this worker.
+// C++: LLVM/Clang + lld (YoWASP build, compiled to WebAssembly) with a wasi-libc / libc++ sysroot.
+// Programs are compiled to wasm32-wasi (no C++ exceptions) and executed inside this worker with a small
+// WASI implementation: blocking stdin from the host, unbuffered output, an in-memory file system.
 import type { FileMap, FromWorker, ToWorker } from "../protocol";
 import { Outbox } from "../outbox";
 import { StdinReader } from "../stdin";
-import { MemFS, WasiApp, untar } from "../vendor/wasmClang";
+import { WasiRuntime, ProcExit } from "./wasi";
 
 const post = (m: FromWorker) => (self as unknown as Worker).postMessage(m);
 type Phase = "compile" | "run" | "system";
@@ -14,32 +15,23 @@ const out = (phase: Phase, stream: "stdout" | "stderr" | "system", data: string)
 // stdout unbuffered: a printf prompt must be visible before scanf blocks (wasi-libc buffers stdout when it is not a tty)
 const HOOK = `#include <cstdio>\n__attribute__((constructor)) static void compieler_unbuffer() { std::setvbuf(stdout, nullptr, _IONBF, 0); }\n`;
 
-interface Toolchain {
-  clang: WebAssembly.Module;
-  lld: WebAssembly.Module;
-  memfs: WebAssembly.Module;
-  sysroot: ArrayBuffer;
-}
-let tc: Toolchain | null = null;
-let loading: Promise<Toolchain> | null = null;
+type Tree = { [name: string]: Tree | string | Uint8Array };
+type RunClang = (args: string[], files?: Tree, options?: Record<string, unknown>) => Promise<Tree>;
+let runClang: RunClang | null = null;
+let loading: Promise<RunClang> | null = null;
 
-async function load(base: string): Promise<Toolchain> {
-  if (tc) return tc;
+const quiet = () => undefined;
+
+async function load(base: string): Promise<RunClang> {
+  if (runClang) return runClang;
   if (!loading) {
     loading = (async () => {
-      const get = async (name: string) => {
-        const res = await fetch(`${base}cpp/${name}`);
-        if (!res.ok) throw new Error(`cannot load ${name}: HTTP ${res.status}`);
-        return res.arrayBuffer();
-      };
-      const [clang, lld, memfs, sysroot] = await Promise.all([get("clang"), get("lld"), get("memfs"), get("sysroot.tar")]);
-      tc = {
-        clang: await WebAssembly.compile(clang),
-        lld: await WebAssembly.compile(lld),
-        memfs: await WebAssembly.compile(memfs),
-        sysroot,
-      };
-      return tc;
+      const url = new URL(`${base}cpp/bundle.js`, self.location.href).href;
+      const mod = (await import(/* @vite-ignore */ url)) as { runClang: RunClang };
+      // warm-up: fetches and compiles the toolchain (~100 MB of WebAssembly) once
+      await mod.runClang(["clang++", "--version"], {}, { stdout: quiet, stderr: quiet, fetchProgress: quiet });
+      runClang = mod.runClang;
+      return runClang;
     })();
   }
   return loading;
@@ -60,99 +52,98 @@ function pickSources(files: FileMap, entry: string): string[] {
   return chosen.sort();
 }
 
+function setPath(tree: Tree, path: string, data: Uint8Array) {
+  const parts = path.split("/");
+  let dir = tree;
+  for (const part of parts.slice(0, -1)) dir = (dir[part] ??= {}) as Tree;
+  dir[parts[parts.length - 1]] = data;
+}
+
 async function run(msg: Extract<ToWorker, { type: "run" }>) {
   const t0 = performance.now();
-  const t = await load(msg.engineBase);
   const reader = new StdinReader(msg.stdin.sab, msg.stdin.prefill, msg.stdin.closed, () => (outbox.flush(), post({ type: "need-input" })), msg.stdin.native ?? null);
-  let phase: Phase = "compile";
   const decoders = new Map<string, TextDecoder>();
-  const fs = new MemFS({
-    memfsModule: t.memfs,
-    onWrite: (fd, bytes) => {
-      const key = `${phase}${fd}`;
-      let d = decoders.get(key);
-      if (!d) decoders.set(key, (d = new TextDecoder()));
-      out(phase, fd === 2 ? "stderr" : "stdout", d.decode(bytes, { stream: true }));
-    },
-    readStdin: (max) => reader.read(max),
-  });
-  await fs.ready;
-  untar(t.sysroot, fs);
-
+  const emit = (ph: Phase, fd: number, bytes: Uint8Array | null) => {
+    if (!bytes || !bytes.length) return;
+    const key = `${ph}${fd}`;
+    let d = decoders.get(key);
+    if (!d) decoders.set(key, (d = new TextDecoder()));
+    out(ph, fd === 2 ? "stderr" : "stdout", d.decode(bytes, { stream: true }));
+  };
   const done = (code: number | null, reason: "ok" | "error" | "compile_error", detail?: string) =>
     (outbox.flush(),
     post({ type: "done", code, reason, changed: {}, deleted: [], durationMs: Math.round(performance.now() - t0), detail }));
-
-  // project files
-  fs.addDirectory("work");
-  const dirs = new Set<string>();
-  for (const [path, data] of Object.entries(msg.files)) {
-    const parts = path.split("/");
-    for (let i = 1; i < parts.length; i++) {
-      const d = "work/" + parts.slice(0, i).join("/");
-      if (!dirs.has(d)) (dirs.add(d), fs.addDirectory(d));
-    }
-    fs.addFile("work/" + path, data);
-  }
-  fs.addDirectory("obj");
-  fs.addFile("work/__compieler_hook.cpp", enc.encode(HOOK));
 
   const sources = pickSources(msg.files, msg.entry);
   if (!sources.length) {
     out("system", "stderr", "No C++ source files (.cpp, .cc, .cxx) found in the project.\n");
     return done(null, "compile_error");
   }
-  const std = (msg.std ?? "c++17").replace(/^c\+\+(20|23)$/, "c++2a");
+  const std = msg.std ?? "c++23";
   const opt = msg.opt ?? "-O2";
   outbox.flush();
   post({ type: "phase", phase: "compile" });
-  out("system", "system", `$ clang -std=${std} ${opt} ${sources.join(" ")}\n`);
+  out("system", "system", `$ clang++ -std=${std} ${opt} ${sources.join(" ")}\n`);
 
-  const objs: string[] = [];
-  for (const [i, src] of [...sources, "__compieler_hook.cpp"].entries()) {
-    const obj = `obj/${i}.o`;
-    const app = new WasiApp(
-      t.clang, fs, "clang", "-cc1", "-emit-obj", "-disable-free",
-      "-isysroot", "/", "-internal-isystem", "/include/c++/v1", "-internal-isystem", "/include", "-internal-isystem", "/lib/clang/8.0.1/include",
-      "-ferror-limit", "19", "-fmessage-length", "0", `-std=${std}`, opt, "-Wall", "-Wextra",
-      "-I", "work", "-o", obj, "-x", "c++", `work/${src}`,
-    );
-    let code: number;
-    try {
-      code = await app.run();
-    } catch (e) {
-      out("compile", "stderr", `internal compiler error: ${String((e as Error).message ?? e)}\n`);
-      return done(null, "compile_error");
-    }
-    if (code !== 0) return done(code, "compile_error");
-    objs.push(obj);
-  }
-  const link = new WasiApp(
-    t.lld, fs, "wasm-ld", "--no-threads", "--export-dynamic", "-z", "stack-size=1048576", "-Llib/wasm32-wasi", "lib/wasm32-wasi/crt1.o",
-    ...objs, "-lc", "-lc++", "-lc++abi", "lib/clang/8.0.1/lib/wasi/libclang_rt.builtins-wasm32.a", "-o", "main.wasm",
-  );
+  let clang: RunClang;
   try {
-    const code = await link.run();
-    if (code !== 0) return done(code, "compile_error");
+    out("system", "system", runClang ? "" : "(first run: loading the C++ compiler, this takes a moment)\n");
+    clang = await load(msg.engineBase);
   } catch (e) {
-    out("compile", "stderr", `linker error: ${String((e as Error).message ?? e)}\n`);
+    out("compile", "stderr", `cannot load the C++ compiler: ${String((e as Error).message ?? e)}\n`);
     return done(null, "compile_error");
   }
 
-  phase = "run";
+  const tree: Tree = {};
+  for (const [path, data] of Object.entries(msg.files)) setPath(tree, path, data);
+  tree["__compieler_hook.cpp"] = enc.encode(HOOK);
+  let wasm: Uint8Array | undefined;
+  try {
+    const result = await clang(
+      ["clang++", `-std=${std}`, opt, "-fno-exceptions", "-fno-rtti", "-Wall", "-Wextra", "-ferror-limit=19", "-fmessage-length=0", "-I.", ...sources, "__compieler_hook.cpp", "-o", "main.wasm"],
+      tree,
+      { stdout: (b: Uint8Array | null) => emit("compile", 1, b), stderr: (b: Uint8Array | null) => emit("compile", 2, b), fetchProgress: quiet },
+    );
+    wasm = result["main.wasm"] as Uint8Array | undefined;
+  } catch (e) {
+    const code = (e as { code?: number }).code;
+    for (const d of decoders.values()) out("compile", "stderr", d.decode());
+    if (typeof code !== "number") out("compile", "stderr", `internal compiler error: ${String((e as Error).message ?? e)}\n`);
+    return done(typeof code === "number" ? code : null, "compile_error");
+  }
+  if (!wasm) {
+    out("compile", "stderr", "the compiler produced no output\n");
+    return done(null, "compile_error");
+  }
+
   outbox.flush();
   post({ type: "phase", phase: "run" });
   let module: WebAssembly.Module;
   try {
-    module = await WebAssembly.compile(fs.getFileContents("main.wasm").slice());
+    module = await WebAssembly.compile(wasm.slice());
   } catch (e) {
     out("run", "stderr", `cannot load the compiled program: ${String((e as Error).message ?? e)}\n`);
     return done(null, "error");
   }
-  const prog = new WasiApp(module, fs, "main", ...msg.args);
+  const files: Record<string, Uint8Array> = {};
+  for (const [p, d] of Object.entries(msg.files)) files[p] = d;
+  const wasi = new WasiRuntime({
+    argv: ["main", ...msg.args],
+    files,
+    readStdin: (max) => reader.read(max),
+    onWrite: (fd, bytes) => emit("run", fd, bytes),
+  });
   let code: number;
   try {
-    code = await prog.run();
+    const instance = await WebAssembly.instantiate(module, wasi.imports());
+    wasi.attach(instance.exports.memory as WebAssembly.Memory);
+    try {
+      (instance.exports._start as () => void)();
+      code = 0;
+    } catch (exn) {
+      if (exn instanceof ProcExit) code = exn.code;
+      else throw exn;
+    }
   } catch (e) {
     const err = e as Error;
     const trap = err instanceof WebAssembly.RuntimeError ? err.message : err instanceof RangeError ? "stack overflow" : err.message;

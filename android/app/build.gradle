@@ -10,8 +10,8 @@ android {
         applicationId 'com.compieler.app'
         minSdk 26
         targetSdk 34
-        versionCode 2
-        versionName '1.0.1'
+        versionCode 3
+        versionName '1.1.0'
     }
 
     // A fixed, committed key so every build can be installed as an update over the previous one.
@@ -39,7 +39,7 @@ android {
     }
     // Keep big engine binaries stored as-is: faster to stream into the WebView, no double compression of .wasm
     androidResources {
-        noCompress 'wasm', 'tar', 'zip', 'whl'
+        noCompress 'zip', 'whl'
     }
     packaging {
         resources.excludes += ['META-INF/*.version']
