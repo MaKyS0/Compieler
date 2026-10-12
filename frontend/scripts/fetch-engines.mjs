@@ -2,7 +2,7 @@
 //   * Pyodide (CPython compiled to WebAssembly) + a base set of wheels  -> engines/pyodide
 //   * YoWASP clang/lld + libc/libc++ sysroot (LLVM, WebAssembly)         -> engines/cpp
 // Run automatically by `npm run build:standalone`. Safe to re-run: existing files are kept.
-import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync, createWriteStream } from "node:fs";
+import { copyFileSync, existsSync, rmSync, mkdirSync, readFileSync, statSync, writeFileSync, createWriteStream } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
@@ -48,6 +48,18 @@ writeFileSync(join(py, "version.json"), JSON.stringify({ version: PYODIDE_VERSIO
 const cpp = join(out, "cpp");
 mkdirSync(cpp, { recursive: true });
 const yowasp = join(root, "node_modules/@yowasp/clang/gen");
-for (const f of ["bundle.js", "llvm.core.wasm", "llvm.core2.wasm", "llvm.core3.wasm", "llvm.core4.wasm", "llvm-resources.tar"]) copyFileSync(join(yowasp, f), join(cpp, f));
 const clangVersion = JSON.parse(readFileSync(join(root, "node_modules/@yowasp/clang/package.json"), "utf8")).version;
-console.log(`engines ready in ${out} (pyodide ${PYODIDE_VERSION}, clang ${clangVersion}, bundled: ${[...wanted].join(", ")})`);
+const HEAVY = ["llvm.core.wasm", "llvm.core2.wasm", "llvm.core3.wasm", "llvm.core4.wasm", "llvm-resources.tar"];
+copyFileSync(join(yowasp, "bundle.js"), join(cpp, "bundle.js"));
+// CPP_ENGINE=remote: keep ~100 MB of compiler out of the app; the worker downloads it from the CDN on first use and caches it.
+const remote = process.env.CPP_ENGINE === "remote";
+for (const f of HEAVY) {
+  const dest = join(cpp, f);
+  if (remote) rmSync(dest, { force: true });
+  else copyFileSync(join(yowasp, f), dest);
+}
+if (remote) {
+  const base = `https://cdn.jsdelivr.net/npm/@yowasp/clang@${clangVersion}/gen/`;
+  writeFileSync(join(cpp, "remote.json"), JSON.stringify({ base, version: clangVersion, files: HEAVY, approxMB: 105 }));
+} else rmSync(join(cpp, "remote.json"), { force: true });
+console.log(`engines ready in ${out} (pyodide ${PYODIDE_VERSION}, clang ${clangVersion} (${remote ? "downloaded on first use" : "bundled"}), bundled: ${[...wanted].join(", ")})`);

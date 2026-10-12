@@ -6,7 +6,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 
 cd "$root/frontend"
 npm ci
-npm run build:standalone                      # fetches Pyodide + wasm-clang, builds dist-standalone/
+CPP_ENGINE=remote npm run build:standalone   # fetches Pyodide, builds dist-standalone/ (the C++ compiler is downloaded by the app on first use)
 
 assets="$root/android/app/src/main/assets/www"
 rm -rf "$assets" && mkdir -p "$assets"

@@ -22,17 +22,92 @@ let loading: Promise<RunClang> | null = null;
 
 const quiet = () => undefined;
 
+// --- optional remote engine ----------------------------------------------------------------------------
+// The Android app ships without the ~100 MB compiler: engines/cpp/remote.json names a CDN folder instead. The
+// files are downloaded on first use and kept in the Cache Storage, so later runs work offline.
+interface RemoteConfig {
+  base: string;
+  version: string;
+  files: string[];
+  approxMB: number;
+}
+let remoteCfg: RemoteConfig | null | undefined;
+let onProgress: ((doneMB: number, totalMB: number) => void) | null = null;
+let fetchInstalled = false;
+
+const localUrl = (base: string, name: string) => new URL(`${base}cpp/${name}`, self.location.href).href;
+
+async function remoteConfig(base: string): Promise<RemoteConfig | null> {
+  if (remoteCfg !== undefined) return remoteCfg;
+  try {
+    const res = await fetch(localUrl(base, "remote.json"));
+    remoteCfg = res.ok ? ((await res.json()) as RemoteConfig) : null;
+  } catch {
+    remoteCfg = null; // missing file (or a server answering with an HTML fallback page): the compiler is bundled
+  }
+  return remoteCfg;
+}
+
+const cacheName = (cfg: RemoteConfig) => `compieler-cpp-${cfg.version}`;
+
+async function remoteCached(cfg: RemoteConfig, base: string): Promise<boolean> {
+  try {
+    const cache = await caches.open(cacheName(cfg));
+    for (const f of cfg.files) if (!(await cache.match(localUrl(base, f)))) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function installRemoteFetch(cfg: RemoteConfig, base: string) {
+  if (fetchInstalled) return;
+  fetchInstalled = true;
+  const original = self.fetch.bind(self);
+  const prefix = localUrl(base, "");
+  const totalBytes = cfg.approxMB * 1024 * 1024;
+  let loaded = 0;
+  self.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    const name = url.startsWith(prefix) ? url.slice(prefix.length).split("?")[0] : "";
+    if (!cfg.files.includes(name)) return original(input, init);
+    const cache = await caches.open(cacheName(cfg)).catch(() => null);
+    const hit = await cache?.match(url);
+    if (hit) return hit;
+    const res = await original(cfg.base + name);
+    if (!res.ok || !res.body) throw new Error(`${name}: HTTP ${res.status}`);
+    const headers = { "content-type": name.endsWith(".wasm") ? "application/wasm" : "application/octet-stream" };
+    const counted = res.body.pipeThrough(
+      new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, ctl) {
+          loaded += chunk.length;
+          onProgress?.(loaded / 1048576, totalBytes / 1048576);
+          ctl.enqueue(chunk);
+        },
+      }),
+    );
+    if (!cache) return new Response(counted, { headers });
+    const [toCache, toCaller] = counted.tee();
+    void cache.put(url, new Response(toCache, { headers })).catch(() => undefined); // quota problems: just download again next time
+    return new Response(toCaller, { headers });
+  };
+}
+
 async function load(base: string): Promise<RunClang> {
   if (runClang) return runClang;
   if (!loading) {
     loading = (async () => {
-      const url = new URL(`${base}cpp/bundle.js`, self.location.href).href;
-      const mod = (await import(/* @vite-ignore */ url)) as { runClang: RunClang };
+      const cfg = await remoteConfig(base);
+      if (cfg) installRemoteFetch(cfg, base);
+      const mod = (await import(/* @vite-ignore */ localUrl(base, "bundle.js"))) as { runClang: RunClang };
       // warm-up: fetches and compiles the toolchain (~100 MB of WebAssembly) once
       await mod.runClang(["clang++", "--version"], {}, { stdout: quiet, stderr: quiet, fetchProgress: quiet });
       runClang = mod.runClang;
       return runClang;
-    })();
+    })().catch((e) => {
+      loading = null; // allow a retry (e.g. after the connection came back)
+      throw e;
+    });
   }
   return loading;
 }
@@ -87,10 +162,28 @@ async function run(msg: Extract<ToWorker, { type: "run" }>) {
 
   let clang: RunClang;
   try {
-    out("system", "system", runClang ? "" : "(first run: loading the C++ compiler, this takes a moment)\n");
+    if (!runClang) {
+      const cfg = await remoteConfig(msg.engineBase);
+      const download = !!cfg && !(await remoteCached(cfg, msg.engineBase));
+      out("system", "system", download ? `(first use: downloading the C++ compiler, about ${cfg!.approxMB} MB, once)\n` : "(first run: loading the C++ compiler, this takes a moment)\n");
+      let nextStep = 10;
+      onProgress = download
+        ? (done, total) => {
+            const pct = Math.min(100, Math.floor((done / total) * 100));
+            if (pct >= nextStep) {
+              nextStep = pct + 10;
+              out("system", "system", `  downloading... ${Math.round(done)} / ${Math.round(total)} MB\n`);
+            }
+          }
+        : null;
+    }
     clang = await load(msg.engineBase);
+    onProgress = null;
   } catch (e) {
-    out("compile", "stderr", `cannot load the C++ compiler: ${String((e as Error).message ?? e)}\n`);
+    onProgress = null;
+    const cfg = await remoteConfig(msg.engineBase);
+    const hint = cfg ? "\nThe C++ compiler is downloaded once on first use (internet needed). Check the connection and press Run again.\n" : "\n";
+    out("compile", "stderr", `cannot load the C++ compiler: ${String((e as Error).message ?? e)}${hint}`);
     return done(null, "compile_error");
   }
 
@@ -163,7 +256,9 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
   const msg = ev.data;
   try {
     if (msg.type === "init") {
-      await load(msg.engineBase);
+      // a remote compiler is not downloaded in the background (it may be metered): only when a program is run
+      const cfg = await remoteConfig(msg.engineBase);
+      if (!cfg || (await remoteCached(cfg, msg.engineBase))) await load(msg.engineBase);
       post({ type: "ready" });
     } else if (msg.type === "run") {
       await run(msg);
