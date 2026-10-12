@@ -159,6 +159,31 @@ test.describe("offline app (no backend): engines run on the device", () => {
     await expect(status(page)).toContainText("exit code 0");
   });
 
+  test("device info: real DEVICE_* values reach Python, JavaScript and C++ (native bridge, if present)", async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as unknown as { AndroidBridge: unknown }).AndroidBridge = {
+        deviceInfo: () => JSON.stringify({ SOURCE: "android-native", MODEL: "Test Phone 9", RAM_TOTAL_MB: "7421", CPU_CORES: "8" }),
+      };
+    });
+    await open(page);
+    await setCode(page, "import os\nprint(os.environ['DEVICE_SOURCE'], os.environ['DEVICE_MODEL'], os.environ['DEVICE_RAM_TOTAL_MB'], os.environ['DEVICE_CPU_CORES'], 'USER_AGENT' in ''.join(k[7:] for k in os.environ if k.startswith('DEVICE_')))\n");
+    await run(page);
+    await expect(out(page)).toContainText("android-native Test Phone 9 7421 8 True");
+    await lang(page, "JavaScript");
+    await setCode(page, "console.log(process.env.DEVICE_MODEL, process.env.DEVICE_RAM_TOTAL_MB, typeof process.env.DEVICE_TIMEZONE)\n");
+    await run(page);
+    await expect(out(page)).toContainText("Test Phone 9 7421 string");
+    await lang(page, "C++");
+    await setCode(page, '#include <cstdio>\n#include <cstdlib>\nint main(){ std::printf("%s|%s\\n", std::getenv("DEVICE_MODEL"), std::getenv("DEVICE_CPU_CORES")); }\n');
+    await run(page);
+    await expect(out(page)).toContainText("Test Phone 9|8", { timeout: 90_000 });
+    await tab(page, "Terminal").click();
+    await page.locator(".xterm").click();
+    await page.keyboard.type("device");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => term(page)).toContain("Test Phone 9");
+  });
+
   test("C++: interactive printf/scanf prompt appears before input, typed in the Terminal", async ({ page }) => {
     await open(page);
     await lang(page, "C++");

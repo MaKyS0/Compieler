@@ -192,6 +192,8 @@ async function run(msg: Extract<ToWorker, { type: "run" }>) {
   const stdin: StdinInit = msg.stdin;
   reader = new StdinReader(stdin.sab, stdin.prefill, stdin.closed, () => (outbox.flush(), post({ type: "need-input" })), stdin.native ?? null);
   resetWork(py, msg.files);
+  py.globals.set("__compieler_env", JSON.stringify(msg.env ?? {}));
+  py.runPython("import os, json\nos.environ.update(json.loads(__compieler_env))\ndel __compieler_env");
   const before = snapshot(py);
   const finish = (code: number | null, reason: "ok" | "error" | "install_failed") => {
     const { changed, deleted } = diff(py, before);

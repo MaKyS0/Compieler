@@ -129,6 +129,7 @@ async function run(msg: Extract<ToWorker, { type: "run" }>) {
   for (const [p, d] of Object.entries(msg.files)) files[p] = d;
   const wasi = new WasiRuntime({
     argv: ["main", ...msg.args],
+    env: msg.env,
     files,
     readStdin: (max) => reader.read(max),
     onWrite: (fd, bytes) => emit("run", fd, bytes),

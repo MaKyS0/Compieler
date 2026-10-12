@@ -140,13 +140,13 @@ function makeWritable(host: Host, stream: "stdout" | "stderr") {
   return w;
 }
 
-export function createProcess(host: Host, argv: string[], exit: (code: number) => never): any {
+export function createProcess(host: Host, argv: string[], exit: (code: number) => never, env: Record<string, string> = {}): any {
   const proc: any = new EventEmitter();
   proc.argv = argv;
   proc.argv0 = "node";
   proc.execPath = "/usr/bin/node";
   proc.execArgv = [];
-  proc.env = { LANG: "C.UTF-8", HOME: "/home", PATH: "/usr/bin" };
+  proc.env = { LANG: "C.UTF-8", HOME: "/home", PATH: "/usr/bin", ...env };
   proc.platform = "linux";
   proc.arch = "x64";
   proc.pid = 1;

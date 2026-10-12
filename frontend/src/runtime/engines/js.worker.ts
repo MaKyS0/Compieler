@@ -251,7 +251,7 @@ async function run(msg: Extract<ToWorker, { type: "run" }>) {
   };
 
   const entryAbs = `${CWD}/${msg.entry}`;
-  const proc = createProcess(host, ["node", entryAbs, ...msg.args], exit);
+  const proc = createProcess(host, ["node", entryAbs, ...msg.args], exit, msg.env);
   const g = globalThis as any;
   g.process = proc;
   g.console = createConsole(host);

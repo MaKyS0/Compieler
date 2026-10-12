@@ -24,6 +24,8 @@ export type ToWorker =
       std?: string;
       opt?: string;
       requirements?: string[];
+      /** Real device information (DEVICE_* variables) merged into the program environment. */
+      env?: Record<string, string>;
     }
   | { type: "install"; engineBase: string; packages: string[] };
 

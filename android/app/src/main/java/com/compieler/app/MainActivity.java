@@ -120,6 +120,12 @@ public class MainActivity extends Activity {
             stdin.eof();
         }
 
+        /** Real device information as a JSON object (see DeviceInfo). */
+        @android.webkit.JavascriptInterface
+        public String deviceInfo() {
+            return DeviceInfo.collect(MainActivity.this);
+        }
+
         @android.webkit.JavascriptInterface
         public void saveFile(String name, String mime, String base64) {
             final byte[] data = Base64.decode(base64, Base64.DEFAULT);

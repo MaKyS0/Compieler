@@ -19,6 +19,7 @@ interface OpenFile {
 export interface WasiOptions {
   argv: string[];
   files: Record<string, Uint8Array>;
+  env?: Record<string, string>;
   readStdin: (max: number) => Uint8Array;
   onWrite: (fd: 1 | 2, bytes: Uint8Array) => void;
 }
@@ -41,9 +42,11 @@ export class WasiRuntime {
   private nextFd = 4;
   private enc = new TextEncoder();
   private dec = new TextDecoder();
-  private env = ["USER=user", "LANG=C.UTF-8"];
+  private env: string[];
 
-  constructor(private o: WasiOptions) {}
+  constructor(private o: WasiOptions) {
+    this.env = ["USER=user", "LANG=C.UTF-8", ...Object.entries(o.env ?? {}).map(([k, v]) => `${k}=${v}`)];
+  }
 
   attach(memory: WebAssembly.Memory) {
     this.memory = memory;
@@ -81,7 +84,7 @@ export class WasiRuntime {
       environ_sizes_get: (count: number, size: number) => {
         const dv = this.dv();
         dv.setUint32(count, this.env.length, true);
-        dv.setUint32(size, this.env.reduce((n, a) => n + a.length + 1, 0), true);
+        dv.setUint32(size, this.env.reduce((n, a) => n + this.enc.encode(a).length + 1, 0), true);
         return ESUCCESS;
       },
       environ_get: (ptrs: number, buf: number) => this.writeStrings(this.env, ptrs, buf),

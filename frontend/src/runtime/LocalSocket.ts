@@ -3,6 +3,7 @@
  * WebSocket it runs the project in an engine Worker (Pyodide / V8 + Node shim / clang-wasm) and emits the
  * same events, so the UI code does not know the difference.
  */
+import { collectDeviceInfo } from "./device";
 import { localApi } from "../api/local";
 import type { Problem, RunRequest, ServerEvent } from "../api/types";
 import { db } from "./db";
@@ -219,7 +220,8 @@ export class LocalSocket {
       /* ignore bad quoting */
     }
     this.attach(j, (m) => void this.onDone(j, m, files, lang));
-    j.worker.postMessage({ type: "run", engineBase: engineBase(), files, entry, args, stdin, std: req.std, opt: req.opt } satisfies ToWorker);
+    const env = await collectDeviceInfo().catch(() => ({}));
+    j.worker.postMessage({ type: "run", engineBase: engineBase(), files, entry, args, stdin, std: req.std, opt: req.opt, env } satisfies ToWorker);
   }
 
   private async startInstall(packages: string[]) {

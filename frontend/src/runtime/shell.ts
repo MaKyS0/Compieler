@@ -2,6 +2,7 @@
 import { localApi } from "../api/local";
 import type { RunRequest } from "../api/types";
 import { db } from "./db";
+import { collectDeviceInfo } from "./device";
 
 export interface ShellHost {
   projectId: number;
@@ -19,6 +20,7 @@ const HELP = `Commands available in this offline terminal:
   python <file.py> [args]     run a Python file      node <file.js> [args]   run a JavaScript file
   g++ <file.cpp> [-std=c++17] compile and run a C++ file
   pip install <pkg>   install a package (internet needed; pure-Python wheels and Pyodide packages)
+  device              real information about this device (also in os.environ / process.env / getenv as DEVICE_*)
   help                this text
 While a program runs, type input and press Enter; Ctrl+D sends end-of-file, Ctrl+C stops it.
 `;
@@ -37,6 +39,14 @@ export async function runShell(command: string, h: ShellHost) {
   if (!cmd) return;
   const id = h.projectId;
   const fail = (msg: string, code = 1) => (h.write("stderr", msg + "\n"), h.end(code));
+
+  if (cmd === "device") {
+    h.start();
+    const env = await collectDeviceInfo();
+    const width = Math.max(...Object.keys(env).map((k) => k.length - 7));
+    for (const k of Object.keys(env).sort()) h.write("stdout", `${k.slice(7).padEnd(width + 2)}${env[k]}\n`);
+    return h.end(0);
+  }
 
   // engine launchers
   const launch = async (entry: string, rest: string[], extra: Partial<RunRequest> = {}) => {
