@@ -184,6 +184,27 @@ test.describe("offline app (no backend): engines run on the device", () => {
     await expect.poll(() => term(page)).toContain("Test Phone 9");
   });
 
+  test("output panel can sit on the right half of the screen and the choice is remembered", async ({ page }) => {
+    await open(page);
+    const editor = page.locator(".monaco-editor").first();
+    const panel = page.getByRole("tab", { name: /^Output\b/ });
+    const before = { e: (await editor.boundingBox())!, p: (await panel.boundingBox())! };
+    expect(before.p.y).toBeGreaterThan(before.e.y + before.e.height - 5); // below the editor by default
+    await page.getByRole("button", { name: "Move panel to the right" }).click();
+    const after = { e: (await editor.boundingBox())!, p: (await panel.boundingBox())! };
+    expect(after.p.x).toBeGreaterThan(after.e.x + after.e.width - 5); // to the right of the editor
+    expect(Math.abs(after.p.y - after.e.y)).toBeLessThan(80); // level with the top of the editor
+    await setCode(page, "print('side-by-side', 6 * 7)\n");
+    await run(page);
+    await expect(out(page)).toContainText("side-by-side 42");
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Move panel to the bottom" })).toBeVisible();
+    await page.getByRole("button", { name: "Hide panel" }).click();
+    await page.getByRole("button", { name: "Show Output / Terminal panel" }).click();
+    await page.getByRole("button", { name: "Move panel to the bottom" }).click();
+    await expect(page.getByRole("button", { name: "Move panel to the right" })).toBeVisible();
+  });
+
   test("C++: interactive printf/scanf prompt appears before input, typed in the Terminal", async ({ page }) => {
     await open(page);
     await lang(page, "C++");

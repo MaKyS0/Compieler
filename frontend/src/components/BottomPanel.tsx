@@ -1,4 +1,4 @@
-import { AlertTriangle, Ban, ChevronDown, CircleAlert, Eraser, Info, Terminal as TermIcon } from "lucide-react";
+import { AlertTriangle, Ban, ChevronDown, ChevronRight, CircleAlert, Eraser, Info, PanelBottom, PanelRight, Terminal as TermIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { terminal } from "../lib/terminal";
 import { useProject } from "../store/project";
@@ -96,6 +96,8 @@ export function BottomPanel({ full }: { full?: boolean }) {
   const tab = useUI((s) => s.bottomTab);
   const setTab = useUI((s) => s.setBottomTab);
   const toggle = useUI((s) => s.toggleBottom);
+  const panelPos = useUI((s) => s.panelPos);
+  const setPanelPos = useUI((s) => s.setPanelPos);
   const output = useRun((s) => s.output);
   const errors = useRun((s) => s.errors);
   const problems = useRun((s) => s.problems);
@@ -136,8 +138,18 @@ export function BottomPanel({ full }: { full?: boolean }) {
             <Eraser size={13} />
           </button>
           {!full && (
+            <button
+              className="btn !h-6 !px-1.5"
+              onClick={() => setPanelPos(panelPos === "right" ? "bottom" : "right")}
+              title={panelPos === "right" ? "Move panel to the bottom" : "Move panel to the right"}
+              aria-label={panelPos === "right" ? "Move panel to the bottom" : "Move panel to the right"}
+            >
+              {panelPos === "right" ? <PanelBottom size={14} /> : <PanelRight size={14} />}
+            </button>
+          )}
+          {!full && (
             <button className="btn !h-6 !px-1.5" onClick={toggle} title="Hide panel" aria-label="Hide panel">
-              <ChevronDown size={14} />
+              {panelPos === "right" ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
             </button>
           )}
         </div>

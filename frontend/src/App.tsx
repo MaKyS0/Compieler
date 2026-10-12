@@ -92,6 +92,8 @@ export default function App() {
   const sidebarWidth = useUI((s) => s.sidebarWidth);
   const bottomOpen = useUI((s) => s.bottomOpen);
   const bottomHeight = useUI((s) => s.bottomHeight);
+  const panelPos = useUI((s) => s.panelPos);
+  const rightWidth = useUI((s) => s.rightWidth);
   const mobileView = useUI((s) => s.mobileView);
   const status = useRun((s) => s.status);
   useShortcuts();
@@ -154,23 +156,46 @@ export default function App() {
               <Splitter direction="col" onDrag={(d) => ui.setSidebarWidth(useUI.getState().sidebarWidth + d)} />
             </>
           )}
-          <div className="flex min-w-0 flex-1 flex-col">
-            <div className="min-h-0 flex-1">
-              <EditorArea mobile={false} />
+          {panelPos === "right" ? (
+            <div className="flex min-w-0 flex-1">
+              <div className="min-w-0 flex-1">
+                <EditorArea mobile={false} />
+              </div>
+              {bottomOpen ? (
+                <>
+                  <Splitter direction="col" onDrag={(d) => ui.setRightWidth(useUI.getState().rightWidth - d)} />
+                  <div style={{ width: rightWidth }} className="min-w-0 shrink-0">
+                    <BottomPanel />
+                  </div>
+                </>
+              ) : (
+                <button
+                  className="w-6 shrink-0 border-l border-line bg-panel text-[11.5px] text-dim hover:text-fg [writing-mode:vertical-rl]"
+                  onClick={ui.toggleBottom}
+                >
+                  Show Output / Terminal panel
+                </button>
+              )}
             </div>
-            {bottomOpen ? (
-              <>
-                <Splitter direction="row" onDrag={(d) => ui.setBottomHeight(useUI.getState().bottomHeight - d)} />
-                <div style={{ height: bottomHeight }} className="shrink-0">
-                  <BottomPanel />
-                </div>
-              </>
-            ) : (
-              <button className="h-6 shrink-0 border-t border-line bg-panel text-[11.5px] text-dim hover:text-fg" onClick={ui.toggleBottom}>
-                Show Output / Terminal panel
-              </button>
-            )}
-          </div>
+          ) : (
+            <div className="flex min-w-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1">
+                <EditorArea mobile={false} />
+              </div>
+              {bottomOpen ? (
+                <>
+                  <Splitter direction="row" onDrag={(d) => ui.setBottomHeight(useUI.getState().bottomHeight - d)} />
+                  <div style={{ height: bottomHeight }} className="shrink-0">
+                    <BottomPanel />
+                  </div>
+                </>
+              ) : (
+                <button className="h-6 shrink-0 border-t border-line bg-panel text-[11.5px] text-dim hover:text-fg" onClick={ui.toggleBottom}>
+                  Show Output / Terminal panel
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
       <StatusBar mobile={mobile} />

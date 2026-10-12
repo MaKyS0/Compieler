@@ -4,6 +4,7 @@ import { lsGet, lsGetNum, lsSet } from "../lib/storage";
 export type Theme = "dark" | "light";
 export type SidebarTab = "files" | "packages" | "settings";
 export type BottomTab = "output" | "errors" | "terminal" | "input" | "problems";
+export type PanelPos = "bottom" | "right";
 export type MobileView = "files" | "editor" | "console";
 
 interface PromptReq {
@@ -30,6 +31,8 @@ interface UIState {
   theme: Theme;
   sidebarWidth: number;
   bottomHeight: number;
+  panelPos: PanelPos;
+  rightWidth: number;
   sidebarTab: SidebarTab;
   sidebarOpen: boolean;
   bottomOpen: boolean;
@@ -45,6 +48,8 @@ interface UIState {
   toggleTheme: () => void;
   setSidebarWidth: (w: number) => void;
   setBottomHeight: (h: number) => void;
+  setPanelPos: (p: PanelPos) => void;
+  setRightWidth: (w: number) => void;
   setSidebarTab: (t: SidebarTab) => void;
   toggleSidebar: () => void;
   toggleBottom: () => void;
@@ -66,6 +71,8 @@ export const useUI = create<UIState>((set, get) => ({
   theme: initialTheme(),
   sidebarWidth: lsGetNum("compieler.sidebarW", 250),
   bottomHeight: lsGetNum("compieler.bottomH", 280),
+  panelPos: lsGet("compieler.panelPos") === "right" ? "right" : "bottom",
+  rightWidth: lsGetNum("compieler.rightW", Math.round(window.innerWidth / 2)), // half of the screen by default
   sidebarTab: "files",
   sidebarOpen: true,
   bottomOpen: true,
@@ -93,6 +100,15 @@ export const useUI = create<UIState>((set, get) => ({
     const v = Math.max(80, Math.min(window.innerHeight - 160, h));
     lsSet("compieler.bottomH", String(v));
     set({ bottomHeight: v });
+  },
+  setPanelPos: (panelPos) => {
+    lsSet("compieler.panelPos", panelPos);
+    set({ panelPos, bottomOpen: true });
+  },
+  setRightWidth: (w) => {
+    const v = Math.max(260, Math.min(window.innerWidth - 360, w));
+    lsSet("compieler.rightW", String(v));
+    set({ rightWidth: v });
   },
   setSidebarTab: (sidebarTab) => set({ sidebarTab, sidebarOpen: true }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
