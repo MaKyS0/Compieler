@@ -34,6 +34,7 @@ export type FromWorker =
   | { type: "phase"; phase: "install" | "compile" | "run" }
   | { type: "out"; phase: "install" | "compile" | "run" | "system"; stream: "stdout" | "stderr" | "system"; data: string }
   | { type: "need-input" }
+  | { type: "graphics"; kind: "turtle"; svg: string }
   | {
       type: "done";
       code: number | null;

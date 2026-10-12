@@ -205,6 +205,44 @@ test.describe("offline app (no backend): engines run on the device", () => {
     await expect(page.getByRole("button", { name: "Move panel to the right" })).toBeVisible();
   });
 
+  test("Python turtle draws into the Graphics tab (animated SVG)", async ({ page }) => {
+    await open(page);
+    await setCode(page, [
+      "import turtle", "",
+      "t = turtle.Turtle()", 'turtle.bgcolor("black")', "t.speed(0)", "t.pensize(2)",
+      'colors = ["red", "orange", "yellow", "lime"]',
+      "for i in range(120):", "    t.color(colors[i % len(colors)])", "    t.forward(i * 0.8)", "    t.right(91)", "",
+      "turtle.done()", "",
+    ].join("\n"));
+    await run(page);
+    const img = page.locator('img[alt="Turtle drawing"]');
+    await expect(img).toBeVisible({ timeout: 60_000 });
+    await expect(status(page)).toContainText("exit code 0");
+    const svg = await page.evaluate(async () => {
+      const src = (document.querySelector('img[alt="Turtle drawing"]') as HTMLImageElement).src;
+      return await (await fetch(src)).text();
+    });
+    expect((svg.match(/<line /g) ?? []).length).toBe(119); // forward(0) draws nothing
+    expect(svg).toContain('fill="black"');
+    // the picture is really painted (not an empty/broken image)
+    expect(await img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBe(800);
+    // a second run without turtle clears it; star import + Screen() + shapes work too
+    await setCode(page, "from turtle import *\nscreen = Screen()\nscreen.setup(400, 300)\nshape('turtle')\ncolor('green', 'yellow')\nbegin_fill()\nfor _ in range(5):\n    forward(100)\n    right(144)\nend_fill()\nwrite('hi', font=('Arial', 14, 'bold'))\nexitonclick()\n");
+    await run(page);
+    await expect(status(page)).toContainText("exit code 0");
+    const svg2 = await page.evaluate(async () => {
+      const src = (document.querySelector('img[alt="Turtle drawing"]') as HTMLImageElement).src;
+      return await (await fetch(src)).text();
+    });
+    expect(svg2).toContain('width="400"');
+    expect(svg2).toContain("<polygon");
+    expect(svg2).toMatch(/>hi<set /);
+    await setCode(page, "print('no graphics')\n");
+    await run(page);
+    await expect(status(page)).toContainText("exit code 0");
+    await expect(page.getByRole("tab", { name: /^Graphics/ })).toHaveCount(0);
+  });
+
   test("C++: interactive printf/scanf prompt appears before input, typed in the Terminal", async ({ page }) => {
     await open(page);
     await lang(page, "C++");

@@ -29,6 +29,7 @@ interface RunState {
   output: string;
   errors: string;
   problems: Problem[];
+  graphics: { kind: "turtle"; svg: string; seq: number } | null;
   stdinText: string;
   connection: "connecting" | "open" | "closed";
   run: () => Promise<void>;
@@ -84,7 +85,7 @@ export const useRun = create<RunState>((set, get) => {
   function handle(ev: ServerEvent) {
     switch (ev.type) {
       case "start":
-        set({ status: "running", kind: ev.kind, startedAt: performance.now(), exit: null });
+        set({ status: "running", kind: ev.kind, startedAt: performance.now(), exit: null, graphics: null });
         break;
       case "status":
         if (ev.state === "queued") {
@@ -115,6 +116,10 @@ export const useRun = create<RunState>((set, get) => {
         else terminal.write(text);
         break;
       }
+      case "graphics":
+        set((s) => ({ graphics: { kind: ev.kind, svg: ev.svg, seq: (s.graphics?.seq ?? 0) + 1 } }));
+        useUI.getState().setBottomTab("graphics");
+        break;
       case "problems":
         set({ problems: ev.items });
         // Compiler errors are the thing to look at; runtime errors keep the user's current tab.
@@ -189,7 +194,7 @@ export const useRun = create<RunState>((set, get) => {
     set({ status: "starting", kind });
     if (kind === "run") {
       await useProject.getState().saveAll().catch(() => undefined);
-      set({ output: "", errors: "", problems: [], exit: null });
+      set({ output: "", errors: "", problems: [], graphics: null, exit: null });
       pendingOut = pendingErr = "";
       terminal.clear();
     }
@@ -211,7 +216,7 @@ export const useRun = create<RunState>((set, get) => {
     if (s.project?.id !== prev.project?.id) {
       socket?.close();
       socket = null;
-      set({ status: "idle", output: "", errors: "", problems: [], exit: null, startedAt: null });
+      set({ status: "idle", output: "", errors: "", problems: [], graphics: null, exit: null, startedAt: null });
       terminal.clear();
       terminal.writeln("Terminal - run a program, or type a shell command (pip install ..., npm install ..., ls).", C.dim);
       terminal.prompt();
@@ -247,6 +252,7 @@ export const useRun = create<RunState>((set, get) => {
     output: "",
     errors: "",
     problems: [],
+    graphics: null,
     stdinText: "",
     connection: "closed",
 
@@ -286,7 +292,7 @@ export const useRun = create<RunState>((set, get) => {
     setStdinText: (stdinText) => set({ stdinText }),
     clearOutput: () => {
       pendingOut = pendingErr = "";
-      set({ output: "", errors: "", problems: [] });
+      set({ output: "", errors: "", problems: [], graphics: null });
       terminal.clear();
       if (get().status === "idle") terminal.prompt();
     },

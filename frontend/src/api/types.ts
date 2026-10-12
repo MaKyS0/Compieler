@@ -74,6 +74,7 @@ export type ServerEvent =
   | { type: "status"; state: string }
   | { type: "output"; phase: string; stream: "stdout" | "stderr" | "system"; data: string }
   | { type: "problems"; items: Problem[]; phase?: string }
+  | { type: "graphics"; kind: "turtle"; svg: string }
   | {
       type: "exit";
       kind: "run" | "shell" | "install";

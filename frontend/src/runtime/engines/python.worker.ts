@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 // Python: real CPython 3.14 compiled to WebAssembly (Pyodide) running in a Worker.
 import { loadPyodide, type PyodideInterface } from "pyodide";
+import turtleSource from "../pylib/turtle.py?raw";
 import type { FileMap, FromWorker, StdinInit, ToWorker } from "../protocol";
 import { Outbox } from "../outbox";
 import { StdinReader } from "../stdin";
@@ -26,6 +27,9 @@ def _compieler_run(entry, args):
     os.environ['PYTHONIOENCODING'] = 'utf-8'
     if '/work' not in sys.path:
         sys.path.insert(0, '/work')
+    if '/compieler_lib' not in sys.path:
+        sys.path.append('/compieler_lib')
+    sys.modules.pop('turtle', None)  # a fresh drawing for every run
     sys.argv = [entry] + list(args)
     for stream in (sys.stdout, sys.stderr):
         try:
@@ -58,6 +62,12 @@ def _compieler_run(entry, args):
         sys.stderr.write(''.join(traceback.format_exception_only(type(e), e)))
         return 1
     finally:
+        try:
+            _turtle = sys.modules.get('turtle')
+            if _turtle is not None and hasattr(_turtle, '_compieler_end_of_program'):
+                _turtle._compieler_end_of_program()
+        except Exception:
+            pass
         try:
             sys.stdout.flush()
             sys.stderr.flush()
@@ -102,6 +112,10 @@ async function boot(engineBase: string): Promise<PyodideInterface> {
         isatty: false,
       });
       py.FS.mkdirTree("/work");
+      py.FS.mkdirTree("/compieler_lib");
+      py.FS.writeFile("/compieler_lib/turtle.py", turtleSource);
+      // graphics produced by programs (turtle) are forwarded to the UI
+      (globalThis as unknown as Record<string, unknown>).__compieler_gfx = (kind: string, svg: string) => post({ type: "graphics", kind: kind as "turtle", svg });
       py.runPython(HARNESS);
       baseModules = py.runPython("list(__import__('sys').modules)") as unknown as string[];
       pyodide = py;

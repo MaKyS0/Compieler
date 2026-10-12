@@ -3,7 +3,7 @@ import { lsGet, lsGetNum, lsSet } from "../lib/storage";
 
 export type Theme = "dark" | "light";
 export type SidebarTab = "files" | "packages" | "settings";
-export type BottomTab = "output" | "errors" | "terminal" | "input" | "problems";
+export type BottomTab = "output" | "errors" | "terminal" | "input" | "problems" | "graphics";
 export type PanelPos = "bottom" | "right";
 export type MobileView = "files" | "editor" | "console";
 

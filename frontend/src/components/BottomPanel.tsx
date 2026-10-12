@@ -1,5 +1,6 @@
-import { AlertTriangle, Ban, ChevronDown, ChevronRight, CircleAlert, Eraser, Info, PanelBottom, PanelRight, Terminal as TermIcon } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { AlertTriangle, Ban, ChevronDown, ChevronRight, CircleAlert, Download, Eraser, Info, PanelBottom, PanelRight, RotateCcw, Shapes, Terminal as TermIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { saveBlob } from "../lib/download";
 import { terminal } from "../lib/terminal";
 import { useProject } from "../store/project";
 import { useRun } from "../store/run";
@@ -41,6 +42,30 @@ function TerminalView() {
   useEffect(() => terminal.setTheme(theme), [theme]);
   useEffect(() => terminal.setFontSize(fontSize), [fontSize]);
   return <div ref={host} className="h-full bg-panel" onClick={() => terminal.focus()} />;
+}
+
+/** Picture drawn by the program (Python turtle): an animated SVG that can be replayed and saved. */
+function GraphicsView() {
+  const gfx = useRun((s) => s.graphics);
+  const [replay, setReplay] = useState(0);
+  const url = useMemo(() => (gfx ? URL.createObjectURL(new Blob([gfx.svg], { type: "image/svg+xml" })) : null), [gfx]);
+  useEffect(() => () => (url ? URL.revokeObjectURL(url) : undefined), [url]);
+  if (!gfx || !url) return <p className="p-3 text-[12px] text-dim">Nothing drawn yet. Run a program that uses <code>turtle</code> and the picture appears here.</p>;
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center gap-1 border-b border-line px-2 py-1">
+        <button className="btn !h-6" onClick={() => setReplay((n) => n + 1)} title="Play the drawing again">
+          <RotateCcw size={12} /> Replay
+        </button>
+        <button className="btn !h-6" onClick={() => void saveBlob(new Blob([gfx.svg], { type: "image/svg+xml" }), "turtle.svg")} title="Save the picture as an SVG file">
+          <Download size={12} /> Save SVG
+        </button>
+      </div>
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[repeating-conic-gradient(rgb(var(--raised))_0%_25%,rgb(var(--panel))_0%_50%)] bg-[length:16px_16px] p-2">
+        <img key={`${gfx.seq}-${replay}`} src={url} alt="Turtle drawing" className="h-full w-full object-contain" />
+      </div>
+    </div>
+  );
 }
 
 function InputView() {
@@ -105,6 +130,7 @@ export function BottomPanel({ full }: { full?: boolean }) {
   const clear = useRun((s) => s.clearOutput);
   const stop = useRun((s) => s.stop);
   const stdinText = useRun((s) => s.stdinText);
+  const graphics = useRun((s) => s.graphics);
 
   const tabs: { id: BottomTab; label: string; badge?: number; tone?: string }[] = [
     { id: "output", label: "Output" },
@@ -113,6 +139,7 @@ export function BottomPanel({ full }: { full?: boolean }) {
     { id: "input", label: "Input" },
     { id: "problems", label: "Problems", badge: problems.length, tone: problems.some((p) => p.severity === "error") ? "bg-err" : "bg-warn" },
   ];
+  if (graphics) tabs.splice(2, 0, { id: "graphics", label: "Graphics" });
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-panel">
@@ -121,6 +148,7 @@ export function BottomPanel({ full }: { full?: boolean }) {
           {tabs.map((t) => (
             <button key={t.id} role="tab" aria-selected={tab === t.id} data-active={tab === t.id} className="tab" onClick={() => setTab(t.id)}>
               {t.id === "terminal" && <TermIcon size={12} />}
+              {t.id === "graphics" && <Shapes size={12} />}
               {t.label}
               {!!t.badge && (
                 <span className={`flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium text-white ${t.tone}`}>{t.id === "errors" ? "!" : t.badge}</span>
@@ -170,6 +198,7 @@ export function BottomPanel({ full }: { full?: boolean }) {
         {tab === "errors" && <LogView text={errors} tone="err" empty="No errors." />}
         {tab === "terminal" && <TerminalView />}
         {tab === "input" && <InputView />}
+        {tab === "graphics" && <GraphicsView />}
         {tab === "problems" && <ProblemsView />}
       </div>
     </div>

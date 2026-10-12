@@ -159,7 +159,8 @@ export class LocalSocket {
         const key = `${m.phase}:${m.stream}`;
         j.text[key] = (j.text[key] ?? "") + m.data;
         this.emit({ type: "output", phase: m.phase, stream: m.stream, data: m.data });
-      } else if (m.type === "need-input") j.feeder.needInput();
+      } else if (m.type === "graphics") this.emit({ type: "graphics", kind: m.kind, svg: m.svg });
+      else if (m.type === "need-input") j.feeder.needInput();
       else if (m.type === "done") onDone(m);
     };
     j.worker.onerror = (e) => {
