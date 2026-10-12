@@ -9,7 +9,7 @@ export interface User {
 
 export interface ProjectSettings {
   entry?: string;
-  cpp_std?: "c++17" | "c++20" | "c++23";
+  cpp_std?: "c++11" | "c++14" | "c++17" | "c++20" | "c++23";
   cpp_opt?: "-O0" | "-O1" | "-O2" | "-O3";
   args?: string;
 }

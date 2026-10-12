@@ -70,3 +70,19 @@ jobs:
       - name: backend tests against Docker
         working-directory: backend
         run: sudo -E env "PATH=$PATH" TEST_SANDBOX=docker python -m pytest -q -k "not fork_bomb"
+
+  # The offline app: engines (Pyodide, wasm-clang) are downloaded at build time, tests run in Chromium.
+  standalone:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build:standalone
+        working-directory: frontend
+      - run: npm ci && npx playwright install --with-deps chromium
+        working-directory: e2e
+      - run: npx playwright test -c playwright.standalone.config.ts
+        working-directory: e2e

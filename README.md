@@ -12,6 +12,28 @@ A browser IDE with a real backend: your code is executed on the server by real *
 
 ---
 
+## Offline app for Android (APK) — no server needed
+
+The same UI also ships as a **standalone build** where nothing runs on a server: projects are stored on the device (IndexedDB) and the three languages run in WebAssembly engines inside the app's WebView.
+
+| Language | Engine on the device | Notes |
+|---|---|---|
+| Python 3.13 | **CPython compiled to WebAssembly (Pyodide)** | full standard library incl. `sqlite3`, `ssl`, `hashlib`, `asyncio.run`; `numpy` bundled; `pandas`, `matplotlib`, `scipy`, `sympy`, `pillow`, … load from the Pyodide CDN when online; `pip install` (pure-Python wheels) via micropip |
+| C++ | **real clang + lld (LLVM 8) compiled to WebAssembly**, wasi-libc + libc++ | C++11/14/17/«2a», STL, multi-file projects, diagnostics → *Problems*; **no exceptions, no threads** |
+| JavaScript | V8 of the WebView with a **Node.js-compatible environment** | `fs` (project files), `path`, `util`, `events`, `readline`, `crypto`, `os`, `stream`, `url`, `assert`, timers, CommonJS + ES modules; npm packages are fetched from a CDN when required (online) |
+
+Interactive input works (Terminal tab, `Ctrl+D` = EOF) because the engines block on a `SharedArrayBuffer`; the app marks its pages cross-origin isolated for that.
+
+**Differences from the server version (be aware):** this is *not* the server sandbox — no `subprocess`/`os.system`, no raw sockets or servers (use `fetch`), no threads/multiprocessing, no C++ exceptions, `node_modules`/`npm install` do not exist (CDN fetch instead), no Black/clang-format/prettier formatting, no accounts (data stays on the device — export ZIP to back up), one program at a time, 60 s time limit. The Terminal is a small built-in shell (`help`).
+
+### Get the APK
+
+* **Releases:** after the *Build Android APK* workflow ran (Actions tab → *Run workflow*, or push a `v*` tag) the file `Compieler.apk` is attached to the GitHub Release; open the release page on the phone and download it. Android asks to allow installs from your browser/file manager.
+* **Build yourself:** `ANDROID_HOME=… ./scripts/build-apk.sh` → `dist/Compieler.apk` (needs Node ≥ 20, JDK 17+, Android SDK 34).
+* **No Android?** `cd frontend && npm run dev:standalone` (or host `dist-standalone/` on any static server — the app registers a tiny service worker to obtain the required isolation headers) runs the same offline app in a desktop/mobile browser.
+
+The APK is signed with a fixed key committed in `android/app/compieler.keystore` (so new builds install as updates; it protects nothing else). First launch loads the Python/C++ engines (a few seconds); later runs are fast.
+
 ## Contents
 
 1. [Architecture](#architecture) · 2. [Requirements](#requirements) · 3. [Quick start (development)](#quick-start-development) · 4. [Production with Docker Compose](#production-with-docker-compose) · 5. [Configuration](#configuration) · 6. [Testing](#testing) · 7. [Security model](#security-model) · 8. [How execution works](#how-execution-works) · 9. [API](#api) · 10. [Project layout](#project-layout) · 11. [Limitations](#limitations) · 12. [What was verified](#what-was-verified-and-what-was-not)
@@ -148,6 +170,10 @@ pytest                              # everything (needs g++, node, and internet 
 pytest -m "not network"             # without the tests that install from PyPI / npm
 sudo -E env "PATH=$PATH" pytest     # as root, to also exercise per-project uid isolation
 
+# offline app: engines run in WebAssembly, no backend
+cd frontend && npm ci && npm run build:standalone
+cd ../e2e && npm ci && npx playwright test -c playwright.standalone.config.ts
+
 # browser end-to-end (Chromium via Playwright) against the built frontend
 cd frontend && npm ci && npm run build
 cd ../e2e && npm ci && npx playwright test
@@ -239,6 +265,8 @@ Everything below was **actually executed** in the build environment (Linux VM, r
 | **PostgreSQL** (`asyncpg`) | API suite against a real PG 16 instance | 20 passed, rows verified in PG |
 | Frontend production build | `tsc --noEmit` + `vite build` | OK |
 | Browser end-to-end (Chromium, desktop + phone viewport) against the built UI and a real backend | Playwright | **19 passed** |
+
+**Offline/standalone app (new):** the standalone web build passes **19 Playwright tests in Chromium** (Python incl. `input()`, numpy, sqlite3, `asyncio.run`, tracebacks; C++ compile/run/diagnostics/multi-file/interactive `scanf`; JavaScript Node modules/readline/ESM/errors; Stop on infinite loops; persistence across reloads; ZIP export/import; shell; image preview). The Android project builds (`assembleRelease` → signed 49 MB APK). **The APK itself has not been run on a phone or emulator** (none was available): behaviour inside the real Android WebView — in particular cross-origin isolation via `WebViewAssetLoader` headers and the soft keyboard in the terminal — is expected but unverified. If isolation is missing, everything except typing input *while a program runs* still works (use the Input tab).
 
 **Not verified** — be aware before deploying:
 

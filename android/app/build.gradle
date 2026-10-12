@@ -1,0 +1,51 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.compieler.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.compieler.app'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    // A fixed, committed key so every build can be installed as an update over the previous one.
+    // This is NOT a secret (it protects nothing but update continuity of a personal app).
+    signingConfigs {
+        release {
+            storeFile file('compieler.keystore')
+            storePassword 'compieler'
+            keyAlias 'compieler'
+            keyPassword 'compieler'
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+        debug {
+            signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    // Keep big engine binaries stored as-is: faster to stream into the WebView, no double compression of .wasm
+    androidResources {
+        noCompress 'wasm', 'tar', 'zip', 'whl'
+    }
+    packaging {
+        resources.excludes += ['META-INF/*.version']
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+}

@@ -10,3 +10,12 @@ data/
 test-results/
 playwright-report/
 .DS_Store
+frontend/public/engines/
+frontend/dist-*/
+android/app/src/main/assets/www/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+test-results-standalone/

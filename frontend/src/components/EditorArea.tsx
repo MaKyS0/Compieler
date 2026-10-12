@@ -7,6 +7,8 @@ import { setupMonaco, monaco } from "../monaco/setup";
 import { useProject } from "../store/project";
 import { useRun } from "../store/run";
 import { useUI } from "../store/ui";
+import { STANDALONE } from "../runtime/mode";
+import { ImagePreview, imageMime } from "./ImagePreview";
 
 setupMonaco();
 
@@ -127,6 +129,8 @@ export function EditorArea({ mobile }: { mobile: boolean }) {
             <FileWarning size={22} />
             <p className="max-w-sm text-center text-[12px]">{buf.error}</p>
           </div>
+        ) : buf?.binary && STANDALONE && imageMime(active) ? (
+          <ImagePreview projectId={project.id} path={active} />
         ) : buf?.binary ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-dim">
             <FileWarning size={22} />

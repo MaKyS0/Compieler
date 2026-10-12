@@ -1,6 +1,7 @@
 import { LogOut } from "lucide-react";
 import { useState } from "react";
 import { useProject } from "../store/project";
+import { STANDALONE } from "../runtime/mode";
 import { useUI } from "../store/ui";
 import { Modal } from "./Dialogs";
 
@@ -14,6 +15,18 @@ export function AuthModal() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  if (STANDALONE) {
+    return (
+      <Modal title="This device" onClose={close} width={400}>
+        <div className="flex flex-col gap-2 p-3 text-[12.5px] leading-relaxed">
+          <p>
+            You are using the <b>offline app</b>: projects are stored on this device (inside the app) and code runs here, with no account or server.
+          </p>
+          <p className="text-dim">Use <b>Projects → Export as ZIP</b> to back your work up or move it to another device.</p>
+        </div>
+      </Modal>
+    );
+  }
   if (user && !user.is_guest) {
     return (
       <Modal title="Account" onClose={close} width={360}>

@@ -2,11 +2,12 @@ import type { Language, Project, ProjectSettings, Problem, ServerConfig, TreeEnt
 
 const TOKEN_KEY = "compieler.token";
 
-export class ApiError extends Error {
-  constructor(public status: number, message: string) {
-    super(message);
-  }
-}
+import { ApiError } from "./errors";
+import { saveBlob } from "../lib/download";
+import { localApi } from "./local";
+import { STANDALONE } from "../runtime/mode";
+
+export { ApiError };
 
 export function getToken(): string | null {
   try {
@@ -60,7 +61,7 @@ async function request<T>(method: string, path: string, body?: unknown, opts: { 
 
 const q = (p: string) => encodeURIComponent(p);
 
-export const api = {
+const remoteApi = {
   config: () => request<ServerConfig>("GET", "/config"),
   guest: () => request<{ token: string; user: User }>("POST", "/auth/guest"),
   me: () => request<User>("GET", "/auth/me"),
@@ -81,14 +82,7 @@ export const api = {
   },
   async exportZip(id: number, name: string) {
     const res = await request<Response>("GET", `/projects/${id}/export`, undefined, { raw: true });
-    const blob = await res.blob();
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${name.replace(/[^\w.-]+/g, "_") || "project"}.zip`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    await saveBlob(await res.blob(), `${name.replace(/[^\w.-]+/g, "_") || "project"}.zip`);
   },
 
   tree: (id: number) => request<TreeEntry[]>("GET", `/projects/${id}/tree`),
@@ -109,3 +103,6 @@ export const api = {
 };
 
 export type { Problem };
+
+/** The backend REST client, or the on-device implementation in the standalone (offline) build. */
+export const api: typeof remoteApi = STANDALONE ? (localApi as unknown as typeof remoteApi) : remoteApi;

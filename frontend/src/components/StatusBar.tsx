@@ -49,8 +49,7 @@ export function StatusBar({ mobile }: { mobile: boolean }) {
       <span className="flex-1" />
       {!mobile && config && (
         <span title={`Code runs in the ${config.sandbox.backend} sandbox${config.sandbox.isolation ? ` (isolation ${config.sandbox.isolation})` : ""}`}>
-          sandbox: {config.sandbox.backend}
-          {config.sandbox.isolation ? ` ${config.sandbox.isolation}` : ""}
+          {config.sandbox.backend === "on-device" ? "on-device · WebAssembly" : `sandbox: ${config.sandbox.backend}${config.sandbox.isolation ? ` ${config.sandbox.isolation}` : ""}`}
         </span>
       )}
       {connection === "closed" && busy && <span className="text-err">disconnected</span>}

@@ -178,12 +178,20 @@ function SettingsPanel() {
         {lim && (
           <div className="rounded border border-line bg-bg p-2 text-[11.5px] leading-relaxed text-dim">
             <div className="mb-1 font-medium text-fg">Sandbox limits</div>
-            Time {lim.run_wall_seconds}s · CPU {lim.run_cpu_seconds}s · Memory {lim.memory_mb} MB · Output {Math.round(lim.max_output_bytes / 1000)} KB
-            <br />
-            Network disabled while your program runs{config?.allow_runtime_network ? " (unless enabled by the host)" : ""}; only package installs can reach PyPI / npm.
-            <br />
-            Isolation: {config?.sandbox.backend}
-            {config?.sandbox.isolation ? ` (${config.sandbox.isolation})` : ""}
+            {config?.sandbox.backend === "on-device" ? (
+              <>
+                Runs on this device in WebAssembly engines (no server). Time limit {lim.run_wall_seconds}s. Python and JavaScript can use <code>fetch</code> / package installs when the device is online; C++ programs have no network.
+              </>
+            ) : (
+              <>
+                Time {lim.run_wall_seconds}s · CPU {lim.run_cpu_seconds}s · Memory {lim.memory_mb} MB · Output {Math.round(lim.max_output_bytes / 1000)} KB
+                <br />
+                Network disabled while your program runs{config?.allow_runtime_network ? " (unless enabled by the host)" : ""}; only package installs can reach PyPI / npm.
+                <br />
+                Isolation: {config?.sandbox.backend}
+                {config?.sandbox.isolation ? ` (${config.sandbox.isolation})` : ""}
+              </>
+            )}
           </div>
         )}
       </div>

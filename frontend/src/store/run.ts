@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import { RunSocket } from "../api/socket";
+import { LocalSocket } from "../runtime/LocalSocket";
+import { STANDALONE } from "../runtime/mode";
 import type { ExitReason, Problem, ServerEvent } from "../api/types";
 import { stripAnsi } from "../lib/ansi";
 import { basename, formatDuration, isRunnable } from "../lib/paths";
@@ -40,7 +42,8 @@ interface RunState {
 }
 
 const MAX_TEXT = 2_000_000;
-let socket: RunSocket | null = null;
+type Transport = RunSocket | LocalSocket;
+let socket: Transport | null = null;
 let socketProject = 0;
 const history: string[] = [];
 let historyPos = 0;
@@ -162,12 +165,12 @@ export const useRun = create<RunState>((set, get) => {
     }
   }
 
-  async function ensureSocket(): Promise<RunSocket | null> {
+  async function ensureSocket(): Promise<Transport | null> {
     const p = useProject.getState().project;
     if (!p) return null;
     if (!socket || socketProject !== p.id) {
       socket?.close();
-      socket = new RunSocket(p.id);
+      socket = STANDALONE ? new LocalSocket(p.id) : new RunSocket(p.id);
       socketProject = p.id;
       socket.on(handle);
       socket.onState((connection) => set({ connection }));
@@ -181,7 +184,7 @@ export const useRun = create<RunState>((set, get) => {
     }
   }
 
-  async function begin(kind: "run" | "shell" | "install", header: string, send: (s: RunSocket) => boolean) {
+  async function begin(kind: "run" | "shell" | "install", header: string, send: (s: Transport) => boolean) {
     if (get().status !== "idle") return;
     set({ status: "starting", kind });
     if (kind === "run") {
