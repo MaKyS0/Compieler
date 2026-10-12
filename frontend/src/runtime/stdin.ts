@@ -6,6 +6,17 @@
  * (user typed a line) or EOF through a SharedArrayBuffer. Requires cross-origin isolation; without
  * it only the pre-filled text of the Input tab is available.
  */
+export interface AndroidStdinBridge {
+  stdinReset(): number;
+  stdinPush(text: string): void;
+  stdinEof(): void;
+}
+/** The Android app's JavaScript bridge, when running inside it. */
+export const androidBridge = (): AndroidStdinBridge | null => {
+  const b = (globalThis as unknown as { AndroidBridge?: Partial<AndroidStdinBridge> }).AndroidBridge;
+  return b && typeof b.stdinReset === "function" ? (b as AndroidStdinBridge) : null;
+};
+
 const HEADER = 16; // Int32[0]=state, Int32[1]=length
 const CAPACITY = 1 << 16;
 const IDLE = 0,
@@ -27,17 +38,22 @@ export class StdinFeeder {
   private ctrl: Int32Array | null;
   private data: Uint8Array | null;
 
-  constructor(sab: SharedArrayBuffer | null) {
+  constructor(
+    sab: SharedArrayBuffer | null,
+    private native: AndroidStdinBridge | null = null,
+  ) {
     this.ctrl = sab ? new Int32Array(sab, 0, 2) : null;
     this.data = sab ? new Uint8Array(sab, HEADER, CAPACITY) : null;
   }
   push(text: string) {
     if (this.ended) return;
+    if (this.native) return this.native.stdinPush(text);
     this.queue.push(new TextEncoder().encode(text));
     this.pump();
   }
   end() {
     this.ended = true;
+    if (this.native) return this.native.stdinEof();
     this.pump();
   }
   /** Called when the worker reports that it is blocked waiting for input. */
@@ -72,23 +88,45 @@ export class StdinReader {
   private pending: Uint8Array = new Uint8Array(0);
   private eof = false;
 
+  private nativeGen: number | null;
+
   constructor(
     sab: SharedArrayBuffer | null,
     private prefill: string,
     closed: boolean,
     private requestInput: () => void,
+    native: { gen: number } | null = null,
   ) {
     this.ctrl = sab ? new Int32Array(sab, 0, 2) : null;
     this.data = sab ? new Uint8Array(sab, HEADER, CAPACITY) : null;
+    this.nativeGen = native ? native.gen : null;
     if (this.prefill) this.pending = new TextEncoder().encode(this.prefill);
-    if (!sab) this.eof = true; // nothing else will ever arrive
+    if (!sab && this.nativeGen === null) this.eof = true; // nothing else will ever arrive
     else if (closed) this.eof = true;
+  }
+
+  /** Blocks in a synchronous XHR until the Android app has input (or EOF) for this program. */
+  private readNative(): Uint8Array | null {
+    this.requestInput(); // flush pending output so the prompt is visible first
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", new URL(`__stdin/${this.nativeGen}`, self.location.origin).href, false);
+    xhr.responseType = "arraybuffer";
+    xhr.send();
+    if (xhr.status !== 200 || xhr.getResponseHeader("X-Stdin-Eof")) return null;
+    return new Uint8Array(xhr.response as ArrayBuffer);
   }
 
   /** Reads up to ``max`` bytes. Returns an empty array at EOF. Blocks while waiting for the user. */
   read(max: number): Uint8Array {
     while (this.pending.length === 0) {
-      if (this.eof || !this.ctrl || !this.data) return new Uint8Array(0);
+      if (this.eof) return new Uint8Array(0);
+      if (this.nativeGen !== null) {
+        const r = this.readNative();
+        if (r === null) this.eof = true;
+        else this.pending = r;
+        continue;
+      }
+      if (!this.ctrl || !this.data) return new Uint8Array(0);
       Atomics.store(this.ctrl, 0, WAITING);
       this.requestInput();
       Atomics.wait(this.ctrl, 0, WAITING);

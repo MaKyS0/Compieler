@@ -10,7 +10,7 @@ import * as diag from "./diagnostics";
 import { engineBase } from "./mode";
 import type { FileMap, FromWorker, StdinInit, ToWorker } from "./protocol";
 import { runShell } from "./shell";
-import { StdinFeeder, canShare, createStdinBuffer } from "./stdin";
+import { StdinFeeder, androidBridge, canShare, createStdinBuffer } from "./stdin";
 
 type Listener = (ev: ServerEvent) => void;
 type StateListener = (state: "connecting" | "open" | "closed") => void;
@@ -22,6 +22,7 @@ interface Job {
   worker: Worker;
   feeder: StdinFeeder;
   sab: SharedArrayBuffer | null;
+  gen: number | null;
   timer: number;
   stopped: boolean;
   finished: boolean;
@@ -139,8 +140,10 @@ export class LocalSocket {
 
   private begin(kind: Job["kind"], lang: Lang): Job {
     const sab = createStdinBuffer();
+    const bridge = sab ? null : androidBridge(); // no shared memory (WebView): native stdin channel
+    const gen = bridge ? bridge.stdinReset() : null;
     const worker = this.takeWorker(lang);
-    const j: Job = { kind, lang, worker, feeder: new StdinFeeder(sab), sab, timer: 0, stopped: false, finished: false, text: {}, started: Date.now() };
+    const j: Job = { kind, lang, worker, feeder: new StdinFeeder(sab, bridge), sab, gen, timer: 0, stopped: false, finished: false, text: {}, started: Date.now() };
     this.job = j;
     this.emit({ type: "start", kind });
     this.emit({ type: "problems", items: [] });
@@ -206,8 +209,8 @@ export class LocalSocket {
       return this.finish(j, { code: null, reason: "error", duration: 0, detail: "" });
     }
     const prefill = req.stdin ?? "";
-    const stdin: StdinInit = { sab: j.sab, prefill, closed: prefill !== "" };
-    if (!j.sab && prefill === "") this.sys("(interactive input is unavailable in this browser context; type your input in the Input tab before pressing Run)\n");
+    const stdin: StdinInit = { sab: j.sab, prefill, closed: prefill !== "", native: j.gen !== null && prefill === "" ? { gen: j.gen } : null };
+    if (!j.sab && j.gen === null && prefill === "") this.sys("(interactive input is unavailable in this browser context; type your input in the Input tab before pressing Run)\n");
     if (prefill !== "") j.feeder.end();
     let args: string[] = [];
     try {

@@ -33,6 +33,7 @@ public class MainActivity extends Activity {
     private WebView web;
     private ValueCallback<Uri[]> pickCallback;
     private byte[] pendingSave;
+    private final StdinChannel stdin = new StdinChannel();
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
@@ -56,7 +57,7 @@ public class MainActivity extends Activity {
 
         final WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
                 .setDomain(HOST)
-                .addPathHandler("/", new IsolatedAssetsHandler(this))
+                .addPathHandler("/", new IsolatedAssetsHandler(this, stdin))
                 .build();
 
         web.setWebViewClient(new WebViewClient() {
@@ -102,8 +103,23 @@ public class MainActivity extends Activity {
         web.loadUrl("https://" + HOST + "/index.html");
     }
 
-    /** Lets the web app save files (ZIP exports) through Android's document picker. */
+    /** Lets the web app save files (ZIP exports) and feed stdin to a running program. */
     private final class Bridge {
+        @android.webkit.JavascriptInterface
+        public int stdinReset() {
+            return stdin.reset();
+        }
+
+        @android.webkit.JavascriptInterface
+        public void stdinPush(String text) {
+            stdin.push(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+
+        @android.webkit.JavascriptInterface
+        public void stdinEof() {
+            stdin.eof();
+        }
+
         @android.webkit.JavascriptInterface
         public void saveFile(String name, String mime, String base64) {
             final byte[] data = Base64.decode(base64, Base64.DEFAULT);

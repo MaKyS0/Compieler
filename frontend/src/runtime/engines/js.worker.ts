@@ -225,7 +225,7 @@ let util_inspect: (v: any) => string = String;
 
 async function run(msg: Extract<ToWorker, { type: "run" }>) {
   const t0 = performance.now();
-  const reader = new StdinReader(msg.stdin.sab, msg.stdin.prefill, msg.stdin.closed, () => (outbox.flush(), post({ type: "need-input" })));
+  const reader = new StdinReader(msg.stdin.sab, msg.stdin.prefill, msg.stdin.closed, () => (outbox.flush(), post({ type: "need-input" })), msg.stdin.native ?? null);
   (globalThis as any).__stdinRead = (n: number) => reader.read(n);
   const vfs = new VFS(msg.files, { readAll: () => reader.readAll() });
   const dec = { stdout: new TextDecoder(), stderr: new TextDecoder() };

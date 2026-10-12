@@ -8,6 +8,8 @@ export interface StdinInit {
   prefill: string;
   /** True when `prefill` is everything (EOF follows); false = more may arrive through `sab`. */
   closed: boolean;
+  /** Android app: blocking reads go through a synchronous XHR answered by native code (no SharedArrayBuffer needed). */
+  native?: { gen: number } | null;
 }
 
 export type ToWorker =

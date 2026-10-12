@@ -190,7 +190,7 @@ async function run(msg: Extract<ToWorker, { type: "run" }>) {
   const t0 = performance.now();
   const py = await boot(msg.engineBase);
   const stdin: StdinInit = msg.stdin;
-  reader = new StdinReader(stdin.sab, stdin.prefill, stdin.closed, () => (outbox.flush(), post({ type: "need-input" })));
+  reader = new StdinReader(stdin.sab, stdin.prefill, stdin.closed, () => (outbox.flush(), post({ type: "need-input" })), stdin.native ?? null);
   resetWork(py, msg.files);
   const before = snapshot(py);
   const finish = (code: number | null, reason: "ok" | "error" | "install_failed") => {

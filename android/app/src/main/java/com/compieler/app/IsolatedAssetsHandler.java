@@ -20,9 +20,11 @@ import java.util.Map;
  */
 final class IsolatedAssetsHandler implements WebViewAssetLoader.PathHandler {
     private final Context context;
+    private final StdinChannel stdin;
 
-    IsolatedAssetsHandler(Context context) {
+    IsolatedAssetsHandler(Context context, StdinChannel stdin) {
         this.context = context.getApplicationContext();
+        this.stdin = stdin;
     }
 
     @Nullable
@@ -30,6 +32,7 @@ final class IsolatedAssetsHandler implements WebViewAssetLoader.PathHandler {
     public WebResourceResponse handle(@NonNull String path) {
         if (path.isEmpty() || path.endsWith("/")) path = path + "index.html";
         if (path.contains("..")) return null;
+        if (path.startsWith("__stdin/")) return handleStdin(path.substring("__stdin/".length()));
         try {
             InputStream stream = context.getAssets().open("www/" + path);
             Map<String, String> headers = new HashMap<>();
@@ -42,6 +45,22 @@ final class IsolatedAssetsHandler implements WebViewAssetLoader.PathHandler {
         } catch (IOException e) {
             return null;
         }
+    }
+
+    /** Answers a Worker's blocking read of stdin (see StdinChannel). */
+    private WebResourceResponse handleStdin(String genText) {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Cache-Control", "no-store");
+        headers.put("Access-Control-Allow-Origin", "*");
+        byte[] data;
+        try {
+            data = stdin.await(Integer.parseInt(genText));
+        } catch (NumberFormatException | InterruptedException e) {
+            data = null;
+        }
+        if (data == null || data.length == 0) headers.put("X-Stdin-Eof", "1");
+        return new WebResourceResponse("application/octet-stream", null, 200, "OK", headers,
+                new java.io.ByteArrayInputStream(data == null ? new byte[0] : data));
     }
 
     private static String mimeOf(String path) {

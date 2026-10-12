@@ -12,10 +12,18 @@ const out = (page: Page) => page.locator("pre").first();
 async function setCode(page: Page, code: string) {
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.evaluate((t) => navigator.clipboard.writeText(t), code);
-  await page.locator(".monaco-editor .view-lines").first().click();
-  await page.keyboard.press("Control+A");
-  await page.keyboard.press("Control+V");
-  await page.waitForTimeout(200);
+  const squash = (t: string) => t.replace(/\s+/g, " ").trim();
+  const first = squash(code.split("\n")[0]);
+  const shown = async () => squash(await page.locator(".monaco-editor .view-lines").first().innerText());
+  // Monaco occasionally swallows the select-all (e.g. while a hover widget opens); retry until the paste landed.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await page.locator(".monaco-editor .view-lines").first().click();
+    await page.keyboard.press("Control+A");
+    await page.keyboard.press("Control+V");
+    await page.waitForTimeout(250);
+    const text = await shown();
+    if (text.startsWith(first) && text.length <= squash(code).length + 2) return;
+  }
 }
 async function lang(page: Page, name: "Python" | "C++" | "JavaScript") {
   await page.getByRole("radio", { name, exact: true }).click();

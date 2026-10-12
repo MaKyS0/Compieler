@@ -63,7 +63,7 @@ function pickSources(files: FileMap, entry: string): string[] {
 async function run(msg: Extract<ToWorker, { type: "run" }>) {
   const t0 = performance.now();
   const t = await load(msg.engineBase);
-  const reader = new StdinReader(msg.stdin.sab, msg.stdin.prefill, msg.stdin.closed, () => (outbox.flush(), post({ type: "need-input" })));
+  const reader = new StdinReader(msg.stdin.sab, msg.stdin.prefill, msg.stdin.closed, () => (outbox.flush(), post({ type: "need-input" })), msg.stdin.native ?? null);
   let phase: Phase = "compile";
   const decoders = new Map<string, TextDecoder>();
   const fs = new MemFS({
