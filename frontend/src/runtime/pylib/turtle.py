@@ -7,6 +7,8 @@ speed(), tracer(), world coordinates.  Keyboard / mouse events are accepted but 
 """
 import math as _math
 import sys as _sys
+import time as _time
+import builtins as _builtins
 
 __all__ = []  # filled in at the bottom
 
@@ -418,10 +420,19 @@ class Turtle:
         self._key(_scene.t)
 
     def clear(self):
+        s = _scene
+        keep = []
         for el in self._mine:
-            if el["cleared"] is None:
-                el["cleared"] = _scene.t
-        _scene.version += 1
+            if el["cleared"] is not None:
+                keep.append(el)
+            elif s.t <= el["t0"] + el.get("dur", 0.0) + 1e-9:
+                el["dropped"] = True  # cleared before it could ever be seen (instant mode): forget it
+            else:
+                el["cleared"] = s.t
+                keep.append(el)
+        self._mine = keep
+        s.elements = [e for e in s.elements if not e.get("dropped")]
+        s.version += 1
 
     # --- appearance
     def showturtle(self):
@@ -560,6 +571,7 @@ class _Screen:
 
     def update(self):
         _scene.version += 1
+        _flush(throttle=0.15)
 
     def turtles(self):
         return list(_scene.turtles)
@@ -768,10 +780,18 @@ def _fmt_k(v):
     return ("%.5f" % v).rstrip("0").rstrip(".") or "0"
 
 
-def _flush(force=False):
+_last_flush = 0.0
+
+
+def _flush(force=False, throttle=0.0):
+    global _last_flush
     s = _scene
     if not s.turtles or (s.version == s.flushed and not force):
         return
+    now = _time.monotonic()
+    if throttle and now - _last_flush < throttle:
+        return
+    _last_flush = now
     if not s.elements and not any(t._visible for t in s.turtles) and not force:
         return
     s.flushed = s.version
@@ -794,6 +814,22 @@ def _compieler_end_of_program():
         _flush()
     except Exception as e:  # never break the program's exit status because of the picture
         print("turtle: could not render the drawing:", e, file=_sys.stderr)
+
+
+# ----------------------------------------------------------------------------- show the picture before waiting for input
+_orig_input = getattr(_builtins, "_compieler_input", None) or _builtins.input
+_builtins._compieler_input = _orig_input
+
+
+def _input_with_flush(prompt=""):
+    try:
+        _flush()
+    except Exception:
+        pass
+    return _orig_input(prompt)
+
+
+_builtins.input = _input_with_flush
 
 
 # ----------------------------------------------------------------------------- module-level functions

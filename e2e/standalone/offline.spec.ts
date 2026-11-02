@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 async function open(page: Page) {
   await page.goto("/");
@@ -241,6 +242,34 @@ test.describe("offline app (no backend): engines run on the device", () => {
     await run(page);
     await expect(status(page)).toContainText("exit code 0");
     await expect(page.getByRole("tab", { name: /^Graphics/ })).toHaveCount(0);
+  });
+
+  test("turtle game: the picture updates every turn and answers are typed under it", async ({ page }) => {
+    await open(page);
+    await setCode(page, readFileSync(join(process.cwd(), "..", "examples", "black_hole_turtle.py"), "utf8"));
+    await run(page);
+    const img = page.locator('img[alt="Turtle drawing"]');
+    await expect(img).toBeVisible({ timeout: 60_000 });
+    const box = page.getByLabel("Program input");
+    await expect(box).toBeVisible();
+    const frame = () => img.evaluate(async (el: HTMLImageElement) => (await (await fetch(el.src)).text()).length + ":" + el.src.slice(-12));
+    const first = await frame();
+    await box.fill("2");
+    await box.press("Enter");
+    await expect.poll(frame, { timeout: 20_000 }).not.toBe(first); // a new frame arrived
+    const svg = await img.evaluate(async (el: HTMLImageElement) => await (await fetch(el.src)).text());
+    expect(svg).toContain("Ход 2");
+    const picture = () => img.evaluate(async (el: HTMLImageElement) => await (await fetch(el.src)).text());
+    for (let i = 0; i < 60; i++) {
+      if (/ПОБЕДА|Связь потеряна|рассыпался/.test(await picture())) break; // the game is over
+      await box.fill(i % 6 === 5 ? "4" : "1");
+      await box.press("Enter");
+      await page.waitForTimeout(350);
+    }
+    expect(await picture()).toMatch(/ПОБЕДА|Связь потеряна|рассыпался/);
+    await box.fill("2");
+    await box.press("Enter");
+    await expect(status(page)).toContainText("exit code 0", { timeout: 30_000 });
   });
 
   test("C++: interactive printf/scanf prompt appears before input, typed in the Terminal", async ({ page }) => {

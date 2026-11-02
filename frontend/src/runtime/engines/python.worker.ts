@@ -30,6 +30,8 @@ def _compieler_run(entry, args):
     if '/compieler_lib' not in sys.path:
         sys.path.append('/compieler_lib')
     sys.modules.pop('turtle', None)  # a fresh drawing for every run
+    if hasattr(builtins, '_compieler_input'):
+        builtins.input = builtins._compieler_input  # undo the previous run's turtle input hook
     sys.argv = [entry] + list(args)
     for stream in (sys.stdout, sys.stderr):
         try:

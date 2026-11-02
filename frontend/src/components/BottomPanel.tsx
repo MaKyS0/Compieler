@@ -47,6 +47,9 @@ function TerminalView() {
 /** Picture drawn by the program (Python turtle): an animated SVG that can be replayed and saved. */
 function GraphicsView() {
   const gfx = useRun((s) => s.graphics);
+  const running = useRun((s) => s.status !== "idle" && s.kind === "run");
+  const sendLine = useRun((s) => s.sendLine);
+  const [line, setLine] = useState("");
   const [replay, setReplay] = useState(0);
   const url = useMemo(() => (gfx ? URL.createObjectURL(new Blob([gfx.svg], { type: "image/svg+xml" })) : null), [gfx]);
   useEffect(() => () => (url ? URL.revokeObjectURL(url) : undefined), [url]);
@@ -64,6 +67,31 @@ function GraphicsView() {
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[repeating-conic-gradient(rgb(var(--raised))_0%_25%,rgb(var(--panel))_0%_50%)] bg-[length:16px_16px] p-2">
         <img key={`${gfx.seq}-${replay}`} src={url} alt="Turtle drawing" className="h-full w-full object-contain" />
       </div>
+      {running && (
+        <form
+          className="flex shrink-0 gap-2 border-t border-line p-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            terminal.write(line + "\n");
+            sendLine(line);
+            setLine("");
+          }}
+        >
+          <input
+            className="field flex-1 font-mono"
+            value={line}
+            onChange={(e) => setLine(e.target.value)}
+            placeholder="Program input: type here and press Enter"
+            aria-label="Program input"
+            autoComplete="off"
+            autoCapitalize="off"
+            spellCheck={false}
+          />
+          <button className="btn btn-solid" type="submit">
+            Send
+          </button>
+        </form>
+      )}
     </div>
   );
 }

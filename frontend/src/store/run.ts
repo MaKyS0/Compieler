@@ -117,8 +117,9 @@ export const useRun = create<RunState>((set, get) => {
         break;
       }
       case "graphics":
+        // switch to the picture the first time it appears; later frames just update it in place
+        if (!get().graphics) useUI.getState().setBottomTab("graphics");
         set((s) => ({ graphics: { kind: ev.kind, svg: ev.svg, seq: (s.graphics?.seq ?? 0) + 1 } }));
-        useUI.getState().setBottomTab("graphics");
         break;
       case "problems":
         set({ problems: ev.items });
