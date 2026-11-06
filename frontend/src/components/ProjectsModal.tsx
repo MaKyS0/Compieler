@@ -5,7 +5,7 @@ import { useProject } from "../store/project";
 import { useUI } from "../store/ui";
 import { Modal } from "./Dialogs";
 
-const LANG_LABEL: Record<Language, string> = { python: "Python", cpp: "C++", javascript: "JavaScript" };
+const LANG_LABEL: Record<Language, string> = { python: "Python", cpp: "C++", javascript: "JavaScript", java: "Java" };
 
 function ago(iso: string) {
   const s = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -18,6 +18,7 @@ function ago(iso: string) {
 export function ProjectsModal() {
   const close = () => useUI.getState().openModal(null);
   const projects = useProject((s) => s.projects);
+  const config = useProject((s) => s.config);
   const current = useProject((s) => s.project);
   const [name, setName] = useState("");
   const [lang, setLang] = useState<Language>("python");
@@ -39,7 +40,7 @@ export function ProjectsModal() {
       >
         <input className="field !h-8 min-w-[140px] flex-1" placeholder="New project name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} aria-label="New project name" />
         <select className="field !h-8 !w-auto" value={lang} onChange={(e) => setLang(e.target.value as Language)} aria-label="Language">
-          {(Object.keys(LANG_LABEL) as Language[]).map((l) => (
+          {(Object.keys(LANG_LABEL) as Language[]).filter((l) => (config?.languages ?? ["python", "cpp", "javascript"]).includes(l)).map((l) => (
             <option key={l} value={l}>
               {LANG_LABEL[l]}
             </option>

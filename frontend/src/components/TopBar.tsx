@@ -9,6 +9,7 @@ const LANGS: { id: Language; label: string; short: string }[] = [
   { id: "python", label: "Python", short: "Py" },
   { id: "cpp", label: "C++", short: "C++" },
   { id: "javascript", label: "JavaScript", short: "JS" },
+  { id: "java", label: "Java", short: "Java" },
 ];
 
 function ProjectName() {
@@ -79,7 +80,7 @@ export function TopBar({ mobile }: { mobile: boolean }) {
       )}
       <ProjectName />
       <div role="radiogroup" aria-label="Language" className="flex shrink-0 overflow-hidden rounded border border-line">
-        {LANGS.map((l) => (
+        {LANGS.filter((l) => (config?.languages ?? ["python", "cpp", "javascript"]).includes(l.id)).map((l) => (
           <button
             key={l.id}
             role="radio"

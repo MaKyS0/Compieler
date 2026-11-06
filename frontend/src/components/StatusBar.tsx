@@ -59,7 +59,7 @@ export function StatusBar({ mobile }: { mobile: boolean }) {
           <span className="font-mono">
             Ln {cursor.line}, Col {cursor.col}
           </span>
-          <span>{project?.language === "cpp" ? "C++" : project?.language === "javascript" ? "JavaScript" : "Python"}</span>
+          <span>{{ cpp: "C++", javascript: "JavaScript", java: "Java", python: "Python" }[project?.language ?? "python"]}</span>
         </>
       )}
     </footer>

@@ -2,7 +2,7 @@
 export interface ProjectRow {
   id: number;
   name: string;
-  language: "python" | "cpp" | "javascript";
+  language: "python" | "cpp" | "javascript" | "java";
   settings: Record<string, unknown>;
   created_at: string;
   updated_at: string;

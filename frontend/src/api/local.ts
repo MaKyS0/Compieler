@@ -90,9 +90,9 @@ async function createProject(name: string, language: Language, template = true):
 export const localApi = {
   async config(): Promise<ServerConfig> {
     return {
-      languages: ["python", "cpp", "javascript"],
+      languages: ["python", "cpp", "javascript", "java"],
       cpp_standards: ["c++11", "c++14", "c++17", "c++20", "c++23"],
-      formatters: { python: false, cpp: false, javascript: false },
+      formatters: { python: false, cpp: false, javascript: false, java: false },
       limits: { run_wall_seconds: 60, run_cpu_seconds: 60, memory_mb: 1024, max_output_bytes: 2_000_000, max_upload_bytes: 25 * 1024 * 1024 },
       allow_runtime_network: false,
       allow_registration: false,
@@ -130,7 +130,7 @@ export const localApi = {
       let entry = DEFAULT_ENTRY[patch.language];
       const files = (await db.files(id)).filter((f) => f.kind === "file");
       if (!files.some((f) => f.path === entry)) {
-        const exts = { python: [".py"], cpp: [".cpp", ".cc", ".cxx"], javascript: [".js"] }[patch.language];
+        const exts = { python: [".py"], cpp: [".cpp", ".cc", ".cxx"], javascript: [".js"], java: [".java"] }[patch.language];
         const existing = files.find((f) => exts.some((e) => f.path.endsWith(e)));
         if (existing) entry = existing.path;
         else for (const [path, content] of Object.entries(TEMPLATES[patch.language])) if (!files.some((f) => f.path === path)) await writeRow(id, path, enc.encode(content));
@@ -182,7 +182,7 @@ export const localApi = {
     const names = new Set(entries.map((e) => e[0]));
     let entry = DEFAULT_ENTRY[language];
     if (!names.has(entry)) {
-      const ext = { python: ".py", cpp: ".cpp", javascript: ".js" }[language];
+      const ext = { python: ".py", cpp: ".cpp", javascript: ".js", java: ".java" }[language];
       entry = [...names].sort().find((n) => n.endsWith(ext)) ?? entry;
     }
     return localApi.patchProject(p.id, { settings: { entry } });

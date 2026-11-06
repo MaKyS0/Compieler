@@ -15,7 +15,7 @@ import { StdinFeeder, androidBridge, canShare, createStdinBuffer } from "./stdin
 
 type Listener = (ev: ServerEvent) => void;
 type StateListener = (state: "connecting" | "open" | "closed") => void;
-type Lang = "python" | "cpp" | "javascript";
+type Lang = "python" | "cpp" | "javascript" | "java";
 
 interface Job {
   kind: "run" | "shell" | "install";
@@ -39,6 +39,8 @@ function spawn(lang: Lang): Worker {
       return new Worker(new URL("./engines/python.worker.ts", import.meta.url), { type: "module" });
     case "cpp":
       return new Worker(new URL("./engines/cpp.worker.ts", import.meta.url), { type: "module" });
+    case "java":
+      return new Worker(new URL("./engines/java.worker.ts", import.meta.url), { type: "module" });
     default:
       return new Worker(new URL("./engines/js.worker.ts", import.meta.url), { type: "module" });
   }
@@ -231,7 +233,11 @@ export class LocalSocket {
     if (!project) return;
     if (project.language !== "python") {
       this.emit({ type: "start", kind: "install" });
-      this.sys(project.language === "javascript" ? "npm packages are fetched from a CDN automatically when your program requires them (internet needed).\n" : "Package installation is not available for C++.\n");
+      this.sys(
+        project.language === "javascript"
+          ? "npm packages are fetched from a CDN automatically when your program requires them (internet needed).\n"
+          : `Package installation is not available for ${project.language === "java" ? "Java" : "C++"}.\n`,
+      );
       return this.emit({ type: "exit", kind: "install", phase: "install", code: 0, signal: null, reason: project.language === "javascript" ? "ok" : "error", duration_ms: 0, detail: "" });
     }
     const j = this.begin("install", "python");
@@ -274,10 +280,12 @@ export class LocalSocket {
       hintText = diag.hints(lang, (j.text["install:stderr"] ?? "") + (j.text["system:stderr"] ?? ""), "install").join("\n");
     }
     if (hintText) for (const h of hintText.split("\n")) this.sys(`\n[hint] ${h}\n`);
-    if (j.lang !== "javascript") {
-      /* warm workers are reused, nothing to terminate */
-    } else j.worker.terminate();
-    if (j.lang !== "javascript" && m.detail !== "engine") this.warm.set(j.lang, j.worker);
+    if (j.lang === "javascript") j.worker.terminate();
+    else if (j.lang === "java") {
+      // a Java program may leave timers or threads behind: start the next run in a fresh worker
+      j.worker.terminate();
+      this.prewarm("java");
+    } else if (m.detail !== "engine") this.warm.set(j.lang, j.worker);
     this.finish(j, { code: m.code, reason: m.reason, duration: m.durationMs, detail: "", problems });
   }
 }

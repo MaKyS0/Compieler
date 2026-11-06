@@ -1,4 +1,4 @@
-export type Language = "python" | "cpp" | "javascript";
+export type Language = "python" | "cpp" | "javascript" | "java";
 
 export interface User {
   id: number;

@@ -96,6 +96,10 @@ export function hints(language: string, stderr: string, phase: string): string[]
   }
   if (language === "cpp" && /no member named 'what'|cannot use '(throw|try)' with exceptions disabled/.test(t))
     out.push("C++ exceptions are not supported by the on-device compiler (WebAssembly/WASI). Use return codes instead of throw/try/catch.");
+  if (language === "java" && (/not available in the on-device Java class library/.test(t) || /cannot find symbol[\s\S]{0,200}?location: (?:class|interface) java\.|of type java\./.test(t)))
+    out.push(
+      "Java here is OpenJDK's javac plus TeaVM: the language is complete, but the class library is a subset (java.lang, java.util, java.util.stream, java.math, java.io basics, Scanner). Reflection, Swing/AWT, networking and files on disk are not available.",
+    );
   if (phase === "install" && /Can't find a pure Python 3 wheel|No matching distribution|Failed to fetch|NetworkError/i.test(t))
     out.push("The package could not be installed: it needs an internet connection, and only pure-Python wheels (or packages bundled with Pyodide) work in the browser engine.");
   return out;

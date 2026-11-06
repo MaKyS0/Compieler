@@ -53,10 +53,25 @@ rl.question("Enter your name: ", (name) => {
 }
 `,
   },
+  java: {
+    "Main.java": `// Java - compiled and run on this device (javac + TeaVM, WebAssembly).
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner in = new Scanner(System.in);
+        System.out.print("Enter your name: ");
+        String name = in.nextLine();
+        System.out.println("Hello, " + name + "!");
+        System.out.printf("Java on %s%n", System.getProperty("java.vendor", "TeaVM"));
+    }
+}
+`,
+  },
 };
 
-export const DEFAULT_ENTRY: Record<Language, string> = { python: "main.py", cpp: "main.cpp", javascript: "index.js" };
-export const EXTENSIONS: Record<Language, string[]> = { python: [".py"], cpp: [".cpp", ".cc", ".cxx"], javascript: [".js", ".mjs", ".cjs"] };
+export const DEFAULT_ENTRY: Record<Language, string> = { python: "main.py", cpp: "main.cpp", javascript: "index.js", java: "Main.java" };
+export const EXTENSIONS: Record<Language, string[]> = { python: [".py"], cpp: [".cpp", ".cc", ".cxx"], javascript: [".js", ".mjs", ".cjs"], java: [".java"] };
 
 export function detectLanguage(paths: string[]): Language {
   let best: Language = "python";

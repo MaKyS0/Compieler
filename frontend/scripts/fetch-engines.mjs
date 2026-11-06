@@ -1,6 +1,7 @@
 // Downloads/copies the on-device engines into public/engines (git-ignored):
 //   * Pyodide (CPython compiled to WebAssembly) + a base set of wheels  -> engines/pyodide
 //   * YoWASP clang/lld + libc/libc++ sysroot (LLVM, WebAssembly)         -> engines/cpp
+//   * javac + TeaVM (teavm-javac, WebAssembly), vendored in the repo       -> engines/java
 // Run automatically by `npm run build:standalone`. Safe to re-run: existing files are kept.
 import { copyFileSync, existsSync, rmSync, mkdirSync, readFileSync, statSync, writeFileSync, createWriteStream } from "node:fs";
 import { dirname, join } from "node:path";
@@ -62,4 +63,11 @@ if (remote) {
   const base = `https://cdn.jsdelivr.net/npm/@yowasp/clang@${clangVersion}/gen/`;
   writeFileSync(join(cpp, "remote.json"), JSON.stringify({ base, version: clangVersion, files: HEAVY, approxMB: 105 }));
 } else rmSync(join(cpp, "remote.json"), { force: true });
+// ---- Java: javac + TeaVM compiled to WebAssembly (vendored, see vendor/teavm-javac/README.md) -----------
+const java = join(out, "java");
+mkdirSync(java, { recursive: true });
+const teavm = join(root, "vendor/teavm-javac");
+for (const f of ["compiler.wasm", "compiler.wasm-runtime.js", "runtime-classlib-teavm.bin"]) copyFileSync(join(teavm, "upstream", f), join(java, f));
+for (const f of ["compile-classlib.bin", "compieler-runtime.bin"]) copyFileSync(join(teavm, f), join(java, f));
+
 console.log(`engines ready in ${out} (pyodide ${PYODIDE_VERSION}, clang ${clangVersion} (${remote ? "downloaded on first use" : "bundled"}), bundled: ${[...wanted].join(", ")})`);

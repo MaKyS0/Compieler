@@ -19,6 +19,7 @@ const HELP = `Commands available in this offline terminal:
   pwd, echo, clear    mkdir <dir>           rm [-r] <path>      mv <from> <to>
   python <file.py> [args]     run a Python file      node <file.js> [args]   run a JavaScript file
   g++ <file.cpp> [-std=c++17] compile and run a C++ file
+  java <File.java|Class> [args] compile and run a Java program
   pip install <pkg>   install a package (internet needed; pure-Python wheels and Pyodide packages)
   device              real information about this device (also in os.environ / process.env / getenv as DEVICE_*)
   help                this text
@@ -62,6 +63,16 @@ export async function runShell(command: string, h: ShellHost) {
   };
   if ((cmd === "python" || cmd === "python3") && args[0] && !args[0].startsWith("-")) return launch(args[0], args.slice(1));
   if (cmd === "node" && args[0]) return launch(args[0], args.slice(1));
+  if (cmd === "java" && args[0] && !args[0].startsWith("-")) {
+    const files = await localApi.snapshot(id);
+    const target = args[0].endsWith(".java") ? args[0] : Object.keys(files).find((p) => p === `${args[0].replace(/\./g, "/")}.java` || p.endsWith(`/${args[0].split(".").pop()}.java`) || p === `${args[0]}.java`) ?? `${args[0]}.java`;
+    return launch(target, args.slice(1));
+  }
+  if (cmd === "javac") {
+    h.start();
+    h.write("stdout", "The on-device Java compiler compiles and runs in one step: use `java Main.java` (or press Run).\n");
+    return h.end(0);
+  }
   if (["g++", "clang++", "c++"].includes(cmd)) {
     const src = args.find((a) => /\.(cpp|cc|cxx)$/i.test(a));
     const std = args.find((a) => a.startsWith("-std="))?.slice(5);

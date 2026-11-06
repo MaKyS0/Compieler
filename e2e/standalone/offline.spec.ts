@@ -26,7 +26,7 @@ async function setCode(page: Page, code: string) {
     if (text.startsWith(first) && text.length <= squash(code).length + 2) return;
   }
 }
-async function lang(page: Page, name: "Python" | "C++" | "JavaScript") {
+async function lang(page: Page, name: "Python" | "C++" | "JavaScript" | "Java") {
   await page.getByRole("radio", { name, exact: true }).click();
   await page.waitForTimeout(400);
 }
@@ -252,24 +252,95 @@ test.describe("offline app (no backend): engines run on the device", () => {
     await expect(img).toBeVisible({ timeout: 60_000 });
     const box = page.getByLabel("Program input");
     await expect(box).toBeVisible();
-    const frame = () => img.evaluate(async (el: HTMLImageElement) => (await (await fetch(el.src)).text()).length + ":" + el.src.slice(-12));
-    const first = await frame();
+    // a frame's blob URL is revoked as soon as the next frame arrives: retry on a failed fetch
+    const picture = () => img.evaluate(async (el: HTMLImageElement) => (await fetch(el.src).then((r) => r.text()).catch(() => "")) || "").catch(() => "");
+    let first = "";
+    await expect.poll(async () => (first = await picture())).toContain("Ход 1");
     await box.fill("2");
     await box.press("Enter");
-    await expect.poll(frame, { timeout: 20_000 }).not.toBe(first); // a new frame arrived
-    const svg = await img.evaluate(async (el: HTMLImageElement) => await (await fetch(el.src)).text());
-    expect(svg).toContain("Ход 2");
-    const picture = () => img.evaluate(async (el: HTMLImageElement) => await (await fetch(el.src)).text());
+    await expect.poll(picture, { timeout: 20_000 }).toContain("Ход 2"); // a new frame arrived
     for (let i = 0; i < 60; i++) {
-      if (/ПОБЕДА|Связь потеряна|рассыпался/.test(await picture())) break; // the game is over
+      let before = "";
+      await expect.poll(async () => (before = await picture())).not.toBe("");
+      if (/ПОБЕДА|Связь потеряна|рассыпался/.test(before)) break; // the game is over
       await box.fill(i % 6 === 5 ? "4" : "1");
       await box.press("Enter");
-      await page.waitForTimeout(350);
+      await expect.poll(picture, { timeout: 20_000 }).not.toBe(before); // wait for the next frame
     }
     expect(await picture()).toMatch(/ПОБЕДА|Связь потеряна|рассыпался/);
     await box.fill("2");
     await box.press("Enter");
     await expect(status(page)).toContainText("exit code 0", { timeout: 30_000 });
+  });
+
+  test("Java: template asks for a name in the Terminal (javac + TeaVM on the device)", async ({ page }) => {
+    await open(page);
+    await lang(page, "Java");
+    await tab(page, "Terminal").click();
+    await run(page);
+    await expect.poll(() => term(page), { timeout: 60_000 }).toContain("Enter your name:");
+    await page.locator(".xterm").click();
+    await page.keyboard.type("Duke");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => term(page)).toContain("Hello, Duke!");
+    await expect(status(page)).toContainText("exit code 0");
+  });
+
+  test("Java: language features, printf, collections, BufferedReader input and System.exit", async ({ page }) => {
+    await open(page);
+    await lang(page, "Java");
+    await setCode(page, [
+      "import java.io.*;",
+      "import java.util.*;",
+      "import java.util.stream.*;",
+      "public class Main {",
+      "  record Point(int x, int y) {}",
+      "  sealed interface Shape permits Sq, Circle {}",
+      "  record Sq(double a) implements Shape {}",
+      "  record Circle(double r) implements Shape {}",
+      "  static double area(Shape s) { return switch (s) { case Sq q -> q.a() * q.a(); case Circle c -> Math.PI * c.r() * c.r(); }; }",
+      "  @Override public String toString() { return \"main\"; }",
+      "  public static void main(String[] args) throws IOException {",
+      "    BufferedReader br = new BufferedReader(new InputStreamReader(System.in));",
+      "    int n = Integer.parseInt(br.readLine().trim());",
+      "    List<Integer> xs = IntStream.rangeClosed(1, n).boxed().collect(Collectors.toList());",
+      "    Map<Boolean, List<Integer>> parts = xs.stream().collect(Collectors.partitioningBy(x -> x % 2 == 0));",
+      "    System.out.printf(\"n=%d sum=%d avg=%.2f %s%n\", n, xs.stream().mapToInt(i -> i).sum(), xs.stream().mapToInt(i -> i).average().orElse(0), parts);",
+      "    System.out.println(new Point(1, 2) + \" \" + String.format(\"%.3f\", area(new Circle(1))) + \" \" + new Main());",
+      "    var text = \"\"\"",
+      "        multi",
+      "        line\"\"\";",
+      "    System.out.println(text.split(\"\\\\n\").length + \" \" + new StringBuilder(\"java\").reverse());",
+      "    System.out.println(\"Привет, мир ✓\");",
+      "    System.exit(3);",
+      "  }",
+      "}",
+      "",
+    ].join("\n"));
+    await tab(page, "Input").click();
+    await page.getByLabel("Standard input").fill("5\n");
+    await tab(page, "Output").click();
+    await run(page);
+    await expect(out(page)).toContainText("n=5 sum=15 avg=3.00 {false=[1, 3, 5], true=[2, 4]}", { timeout: 60_000 });
+    await expect(out(page)).toContainText("Point[x=1, y=2] 3.142 main");
+    await expect(out(page)).toContainText("2 avaj");
+    await expect(out(page)).toContainText("Привет, мир ✓");
+    await expect(status(page)).toContainText("exit code 3");
+  });
+
+  test("Java: compile errors become Problems; uncaught exceptions end with exit code 1", async ({ page }) => {
+    await open(page);
+    await lang(page, "Java");
+    await setCode(page, "public class Main {\n  public static void main(String[] args) {\n    int x = \"text\";\n  }\n}\n");
+    await run(page);
+    await tab(page, "Problems").click();
+    await expect(page.getByText(/incompatible types/).first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/Main\.java:3/).first()).toBeVisible();
+    await setCode(page, "public class Main {\n  public static void main(String[] args) {\n    System.out.println(\"start\");\n    int[] a = new int[2];\n    System.out.println(a[5]);\n  }\n}\n");
+    await run(page);
+    await tab(page, "Errors").click();
+    await expect(out(page)).toContainText("ArrayIndexOutOfBoundsException", { timeout: 60_000 });
+    await expect(status(page)).toContainText("exit code 1");
   });
 
   test("C++: interactive printf/scanf prompt appears before input, typed in the Terminal", async ({ page }) => {

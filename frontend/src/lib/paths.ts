@@ -8,6 +8,7 @@ export const EXT: Record<Language, string[]> = {
   python: [".py"],
   cpp: [".cpp", ".cc", ".cxx"],
   javascript: [".js", ".mjs", ".cjs"],
+  java: [".java"],
 };
 
 export function isRunnable(path: string, lang: Language): boolean {
@@ -21,6 +22,7 @@ export function monacoLanguage(path: string): string {
   if (/\.(cpp|cc|cxx|c|h|hpp|hh|hxx|inl|tpp)$/.test(p)) return "cpp";
   if (/\.(js|mjs|cjs|jsx)$/.test(p)) return "javascript";
   if (/\.(ts|tsx)$/.test(p)) return "typescript";
+  if (p.endsWith(".java")) return "java";
   if (p.endsWith(".json")) return "json";
   if (p.endsWith(".md")) return "markdown";
   if (p.endsWith(".html")) return "html";
