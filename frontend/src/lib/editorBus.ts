@@ -10,6 +10,10 @@ export const editorBus = {
     editor = e;
     monacoRef = m;
   },
+  /** Current text of the open file (used by the end-to-end tests). */
+  value(): string {
+    return editor?.getModel()?.getValue() ?? "";
+  },
   get editor() {
     return editor;
   },
@@ -44,6 +48,13 @@ export const editorBus = {
       home: "cursorHome",
       end: "cursorEnd",
     };
+    if (command === "tab") {
+      // like the Tab key: accept the open suggestion (expands sout, psvm, ...) or indent
+      const model = editor.getModel();
+      const version = model?.getAlternativeVersionId();
+      editor.trigger("keyboard", "acceptSelectedSuggestion", {});
+      if (model && model.getAlternativeVersionId() !== version) return;
+    }
     editor.trigger("keyboard", map[command], null);
   },
   /** Replace the whole document as a single undoable edit (used by Format). */
@@ -63,3 +74,5 @@ export const editorBus = {
     editor?.getAction("editor.action.startFindReplace")?.run();
   },
 };
+
+(globalThis as unknown as { __compielerEditor?: typeof editorBus }).__compielerEditor = editorBus;

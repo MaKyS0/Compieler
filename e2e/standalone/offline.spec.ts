@@ -286,6 +286,40 @@ test.describe("offline app (no backend): engines run on the device", () => {
     await expect(status(page)).toContainText("exit code 0");
   });
 
+  test("Java: IntelliJ-style live templates (psvm, sout + Tab), postfix templates and auto-import", async ({ page }) => {
+    await open(page);
+    await lang(page, "Java");
+    await setCode(page, "public class Main {\n\n}\n");
+    await page.keyboard.press("Control+Home");
+    await page.keyboard.press("ArrowDown");
+    const suggest = page.locator(".monaco-editor .suggest-widget");
+    await page.keyboard.type("psvm");
+    await expect(suggest).toBeVisible();
+    await page.keyboard.press("Tab");
+    await page.keyboard.type("sout");
+    await expect(suggest).toBeVisible();
+    await page.keyboard.press("Tab");
+    await page.keyboard.type('"hi"');
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("(6 * 7).sout");
+    await expect(suggest).toContainText("sout");
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("ArrayLis");
+    await expect(suggest).toContainText("ArrayList");
+    await page.waitForTimeout(300);
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("<Integer> xs = new ArrayList<>();");
+    const code = () => page.evaluate(() => (globalThis as unknown as { __compielerEditor: { value(): string } }).__compielerEditor.value());
+    await expect.poll(code).toContain("import java.util.ArrayList;");
+    expect(await code()).toMatch(/public static void main\(String\[\] args\) \{\n\s+System\.out\.println\("hi"\);\n\s+System\.out\.println\(\(6 \* 7\)\);\n\s+ArrayList<Integer> xs/);
+    await run(page);
+    await expect(out(page)).toContainText("hi\n42", { timeout: 60_000 });
+    await expect(status(page)).toContainText("exit code 0");
+  });
+
   test("Java: language features, printf, collections, BufferedReader input and System.exit", async ({ page }) => {
     await open(page);
     await lang(page, "Java");

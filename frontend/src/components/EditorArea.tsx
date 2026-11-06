@@ -81,6 +81,9 @@ export function EditorArea({ mobile }: { mobile: boolean }) {
       suggestOnTriggerCharacters: true,
       quickSuggestions: { other: true, comments: false, strings: true },
       acceptSuggestionOnEnter: "on" as const,
+      // live templates: type an abbreviation (sout, psvm, fori, ...) and press Tab
+      tabCompletion: "on" as const,
+      snippetSuggestions: "top" as const,
       fixedOverflowWidgets: true,
       mouseWheelZoom: true,
       accessibilitySupport: "auto" as const,

@@ -3,6 +3,7 @@ import * as monaco from "monaco-editor";
 import editorWorker from "monaco-editor/editor/editor.worker?worker";
 import tsWorker from "monaco-editor/language/typescript/ts.worker?worker";
 import { CPP_HEADERS, CPP_KEYWORDS, CPP_SNIPPETS, STD_NAMES } from "./cppdata";
+import { JAVA_CLASSES, JAVA_KEYWORDS, JAVA_MEMBERS, JAVA_POSTFIX, JAVA_TEMPLATES } from "./javadata";
 import pydata from "./pydata.json";
 
 // Everything is bundled: no CDN, works offline and under a strict CSP.
@@ -135,8 +136,94 @@ function cppCompletions() {
         suggestions.push({ label: s.label, kind: K.Snippet, insertText: s.insert, insertTextRules: SNIP, documentation: s.doc, range, detail: "snippet" });
       for (const n of STD_NAMES) suggestions.push({ label: "std::" + n, kind: K.Function, insertText: "std::" + n, range, sortText: "z" + n });
       // identifiers already in the file
-      const seen = new Set<string>();
+      const seen = new Set<string>([word.word]);
       for (const w of model.getValue().match(/[A-Za-z_]\w{2,}/g) ?? []) if (!seen.has(w)) (seen.add(w), suggestions.push({ label: w, kind: K.Text, insertText: w, range, sortText: "y" + w }));
+      return { suggestions };
+    },
+  });
+}
+
+/** Start index of the expression that ends at `end` (exclusive): identifiers, dots, calls, indexes, strings. */
+function expressionStart(text: string, end: number): number {
+  let i = end;
+  while (i > 0) {
+    const c = text[i - 1];
+    if (/[\w$.]/.test(c)) i--;
+    else if (c === ")" || c === "]") {
+      const open = c === ")" ? "(" : "[";
+      let depth = 0;
+      while (i > 0) {
+        const d = text[--i];
+        if (d === c) depth++;
+        else if (d === open && --depth === 0) break;
+      }
+    } else if (c === '"') {
+      i--;
+      while (i > 0 && !(text[i - 1] === '"' && text[i - 2] !== "\\")) i--;
+      i--;
+    } else break;
+  }
+  while (i < end && text[i] === ".") i++;
+  return Math.max(0, i);
+}
+
+function javaCompletions() {
+  const snippetText = (s: string) => s.replace(/[\\$}]/g, (m) => "\\" + m);
+  monaco.languages.registerCompletionItemProvider("java", {
+    triggerCharacters: ["."],
+    provideCompletionItems(model, position) {
+      const word = model.getWordUntilPosition(position);
+      const range = new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn);
+      const line = model.getLineContent(position.lineNumber);
+      const before = line.slice(0, position.column - 1);
+      const suggestions: Item[] = [];
+
+      // after a dot: members of well-known classes, and postfix templates (expr.sout, expr.for, ...)
+      const dot = word.startColumn - 2; // index of the character before the word
+      if (dot >= 0 && before[dot] === ".") {
+        const start = expressionStart(before, dot);
+        const expr = before.slice(start, dot);
+        if (!expr) return { suggestions };
+        for (const m of JAVA_MEMBERS[expr] ?? [])
+          suggestions.push({ label: m, kind: /^[A-Z_]+$/.test(m) ? K.Constant : K.Method, insertText: m, range, sortText: "0" + m });
+        const whole = new monaco.Range(position.lineNumber, start + 1, position.lineNumber, word.endColumn);
+        for (const t of JAVA_POSTFIX)
+          suggestions.push({
+            label: t.label,
+            kind: K.Snippet,
+            insertText: t.insert.split("$E").join(snippetText(expr)),
+            insertTextRules: SNIP,
+            filterText: `${expr}.${t.label}`,
+            range: whole,
+            detail: "postfix template",
+            documentation: t.doc,
+            sortText: "1" + t.label,
+          });
+        return { suggestions };
+      }
+
+      for (const t of JAVA_TEMPLATES)
+        suggestions.push({ label: t.label, kind: K.Snippet, insertText: t.insert, insertTextRules: SNIP, documentation: t.doc, detail: "live template", range, sortText: "0" + t.label });
+      for (const k of JAVA_KEYWORDS) suggestions.push({ label: k, kind: K.Keyword, insertText: k, range, sortText: "1" + k });
+      const text = model.getValue();
+      for (const [cls, pkg] of Object.entries(JAVA_CLASSES)) {
+        const item: Item = { label: cls, kind: K.Class, insertText: cls, range, detail: pkg, sortText: "2" + cls };
+        const imported = pkg === "java.lang" || new RegExp(`^\\s*import\\s+${pkg.replace(/\./g, "\\.")}\\.(\\*|${cls})\\s*;`, "m").test(text);
+        if (!imported) {
+          // add the import after the package declaration / existing imports, like an IDE
+          const lines = text.split("\n");
+          let at = 0;
+          lines.forEach((l, i) => {
+            if (/^\s*(package|import)\s/.test(l)) at = i + 1;
+          });
+          item.additionalTextEdits = [{ range: new monaco.Range(at + 1, 1, at + 1, 1), text: `import ${pkg}.${cls};\n${at > 0 && /^\s*package\s/.test(lines[at - 1]) ? "\n" : ""}` }];
+          item.detail = `${pkg} (adds import)`;
+        }
+        suggestions.push(item);
+      }
+      const seen = new Set<string>([word.word]); // not the half-typed word itself: it would win over real matches
+      for (const w of text.match(/[A-Za-z_$][\w$]{2,}/g) ?? [])
+        if (!seen.has(w) && !(w in JAVA_CLASSES)) (seen.add(w), suggestions.push({ label: w, kind: K.Text, insertText: w, range, sortText: "3" + w }));
       return { suggestions };
     },
   });
@@ -175,6 +262,7 @@ export function setupMonaco() {
   defineThemes();
   pythonCompletions();
   cppCompletions();
+  javaCompletions();
   javascriptSetup();
 }
 export { monaco };
